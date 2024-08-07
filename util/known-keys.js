@@ -8,6 +8,7 @@ export function getTestKeys() {
         bob: keyring.addFromUri('//Bob'),
         bobHot: keyring.addFromUri('//BobHot'),
         charlie: keyring.addFromUri('//Charlie'),
+        charlieHot: keyring.addFromUri('//CharlieHot'),
         zari: keyring.addFromUri('//Zari')
     };
 }

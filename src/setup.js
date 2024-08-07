@@ -23,7 +23,6 @@ async function createApi() {
   global.api = new ApiPromise({ provider: wsProvider });
   try {
     await withTimeout(api.isReady, CONN_TIMEOUT);
-    console.log("=============== API created");
   } catch (error) {
     api.disconnect();
     throw Error('Connection timeout')

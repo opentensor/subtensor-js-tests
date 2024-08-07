@@ -91,29 +91,25 @@ describe('Childkeys', () => {
 
   it('Validator permits update', async () => {
     await usingApi(async api => {
+      // Add 3rd neuron
+      const txRegisterNeuron1 = api.tx.subtensorModule.burnedRegister(netuid, tk.charlieHot.address);
+      await sendTransaction(api, txRegisterNeuron1, tk.charlie);
+
       // Get initialValidatorPermits
       const validatorPermitsBefore = (await api.query.subtensorModule.validatorPermit(netuid)).toHuman();
 
-      // Remove Alice's stake
-      const aliceStake = (await api.query.subtensorModule.stake(tk.aliceHot.address, tk.alice.address)).toNumber();
-      const txRemoveStake = api.tx.subtensorModule.removeStake(tk.aliceHot.address, aliceStake.toString());
-      await sendTransaction(api, txRemoveStake, tk.alice);
+      // Add Charlie's stake
+      const txAddStake = api.tx.subtensorModule.addStake(tk.charlieHot.address, stake.toString());
+      await sendTransaction(api, txAddStake, tk.charlie);
 
-      // // Wait for epoch
-      // await skipBlocks(api, subnetTempo);
+      // Wait for epoch
+      await skipBlocks(api, subnetTempo);
 
-      // // Read permits
-      // const validatorPermitsAfter = (await api.query.subtensorModule.validatorPermit(netuid)).toHuman();
+      // Read permits
+      const validatorPermitsAfter = (await api.query.subtensorModule.validatorPermit(netuid)).toHuman();
 
-      // // Re-add Alice's stake back
-      // const txAddStake = api.tx.subtensorModule.addStake(tk.aliceHot.address, aliceStake.toString());
-      // await sendTransaction(api, txAddStake, tk.alice);
-
-      // // Wait for epoch
-      // await skipBlocks(api, subnetTempo);
-
-      // expect(validatorPermitsBefore[0]).to.be.true;
-      // expect(validatorPermitsAfter[0]).to.be.false;
+      expect(validatorPermitsBefore[2]).to.be.false;
+      expect(validatorPermitsAfter[2]).to.be.true;
     });
   });
 
