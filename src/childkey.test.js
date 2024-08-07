@@ -1,12 +1,13 @@
 import { usingApi, sendTransaction, skipBlocks } from '../util/comm.js';
 import { expect } from 'chai';
 import { getTestKeys } from '../util/known-keys.js';
+import { waitForStakeIncrease } from '../util/waiters.js';
 import BigNumber from 'bignumber.js';
 
 const netuid = 1;
 const stake = new BigNumber(10e9);
 const subnetTempo = 10;
-const hotkeyTempo = 100;
+const hotkeyTempo = 20;
 let tk;
 
 describe('Childkeys', () => {
@@ -67,12 +68,26 @@ describe('Childkeys', () => {
       );
       await sendTransaction(api, txSudoSetStakingRateLimit, tk.alice);
 
+      // Allow to register neurons frequently
+      console.log(`Allow to register neurons frequently`);
+      const txSudoSetRegistrationRateLimit = api.tx.sudo.sudo(
+        api.tx.adminUtils.sudoSetTargetRegistrationsPerInterval(netuid, 1000)
+      );
+      await sendTransaction(api, txSudoSetRegistrationRateLimit, tk.alice);
+
       // Reduce subnet tempo
       console.log(`Reduce subnet tempo`);
       const txSudoSetTempo = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetTempo(netuid, subnetTempo)
       );
       await sendTransaction(api, txSudoSetTempo, tk.alice);
+
+      // Reduce root tempo
+      console.log(`Reduce subnet tempo`);
+      const txSudoSetTempoRoot = api.tx.sudo.sudo(
+        api.tx.adminUtils.sudoSetTempo(rootId, subnetTempo)
+      );
+      await sendTransaction(api, txSudoSetTempoRoot, tk.alice);
 
       // Reduce hotkey drain tempo
       console.log(`Reduce hotkey tempo`);
@@ -186,5 +201,48 @@ describe('Childkeys', () => {
       ).to.be.true;
     });
   });
+
+  it('Delegate stake rewards', async () => {
+    await usingApi(async api => {
+      // Bob is already a delegate because he registered in root
+      // Eve delegates stake to Bob
+      const txAddStake = api.tx.subtensorModule.addStake(tk.bobHot.address, stake.toString());
+      await sendTransaction(api, txAddStake, tk.eve);
+
+      // Wait until the hotkey drain - Eve's stake will be increased
+      await waitForStakeIncrease(api, hotkeyTempo, tk.bobHot.address, tk.eve.address);
+    });
+  });
+
+  it('Child stake rewards', async () => {
+    await usingApi(async api => {
+      // Get neuron count
+      const neuronCount = (await api.query.subtensorModule.subnetworkN(netuid)).toHuman();
+
+      // Dave registers as a neuron, but doesn't stake
+      const txRegisterNeuron = api.tx.subtensorModule.burnedRegister(netuid, tk.daveHot.address);
+      await sendTransaction(api, txRegisterNeuron, tk.dave);
+
+      // Get initialValidatorPermits
+      const validatorPermitsBefore = (await api.query.subtensorModule.validatorPermit(netuid)).toHuman();
+      expect(validatorPermitsBefore[neuronCount]).to.be.false;
+
+      // Bob makes Dave his only child
+      const txSetChildren = api.tx.subtensorModule.setChildren(tk.bobHot.address, netuid, [[0xFFFFFFFFFFFFFFFFn, tk.daveHot.address]]);
+      await sendTransaction(api, txSetChildren, tk.bob);
+
+      // Wait for 2 epochs
+      await skipBlocks(api, subnetTempo * 2);
+
+      // Dave should get his validator permit by now
+      const validatorPermitsAfter2 = (await api.query.subtensorModule.validatorPermit(netuid)).toHuman();
+      expect(validatorPermitsAfter2[neuronCount]).to.be.true;
+
+      // Wait until the hotkey drain - Dave's stake will be increased
+      await waitForStakeIncrease(api, hotkeyTempo, tk.bobHot.address, tk.dave.address);
+    });
+  });
+
+  // TODO: Test with validator limit. Child with should replace parent.
 
 });
