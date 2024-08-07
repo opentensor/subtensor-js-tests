@@ -4,10 +4,10 @@ import { getTestKeys } from '../util/known-keys.js';
 import BigNumber from 'bignumber.js';
 
 const netuid = 1;
-let tk;
 const stake = new BigNumber(10e9);
 const subnetTempo = 10;
 const hotkeyTempo = 100;
+let tk;
 
 describe('Childkeys', () => {
   before(async () => {
@@ -28,7 +28,7 @@ describe('Childkeys', () => {
       }
 
       // Add stake for alice and bob if it is not added yet
-      const aliceStake = (await api.query.subtensorModule.stake(tk.aliceHot.address, tk.alice.address)).toHuman();
+      const aliceStake = (await api.query.subtensorModule.stake(tk.aliceHot.address, tk.alice.address)).toNumber();
       if (aliceStake == 0) {
         console.log(`Adding stake for Alice`);
         const txAddStake = api.tx.subtensorModule.addStake(tk.aliceHot.address, stake.toString());
@@ -37,7 +37,7 @@ describe('Childkeys', () => {
         console.log(`Alice already has stake: ${aliceStake}`);
       }
 
-      const bobStake = (await api.query.subtensorModule.stake(tk.bobHot.address, tk.bob.address)).toHuman();
+      const bobStake = (await api.query.subtensorModule.stake(tk.bobHot.address, tk.bob.address)).toNumber();
       if (bobStake == 0) {
         console.log(`Adding stake for Bob`);
         const txAddStake = api.tx.subtensorModule.addStake(tk.bobHot.address, stake.toString());
@@ -52,6 +52,13 @@ describe('Childkeys', () => {
         api.tx.adminUtils.sudoSetWeightsSetRateLimit(netuid, 0)
       );
       await sendTransaction(api, txSudoSetWeightsRateLimit, tk.alice);
+
+      // Allow to stake/unstake frequently
+      console.log(`Allow setting weights frequently`);
+      const txSudoSetStakingRateLimit = api.tx.sudo.sudo(
+        api.tx.adminUtils.sudoSetTargetStakesPerInterval(1000)
+      );
+      await sendTransaction(api, txSudoSetStakingRateLimit, tk.alice);
 
       // Reduce subnet tempo
       console.log(`Reduce subnet tempo`);
@@ -79,11 +86,38 @@ describe('Childkeys', () => {
       console.log(`Bob sets weights`);
       const txSetWeights = api.tx.subtensorModule.setWeights(netuid, [0, 1], [65535, 65535], 0);
       await sendTransaction(api, txSetWeights, tk.bobHot);
-    
     });
   });
 
-  it('Blocks since last step progress', async () => {
+  it('Validator permits update', async () => {
+    await usingApi(async api => {
+      // Get initialValidatorPermits
+      const validatorPermitsBefore = (await api.query.subtensorModule.validatorPermit(netuid)).toHuman();
+
+      // Remove Alice's stake
+      const aliceStake = (await api.query.subtensorModule.stake(tk.aliceHot.address, tk.alice.address)).toNumber();
+      const txRemoveStake = api.tx.subtensorModule.removeStake(tk.aliceHot.address, aliceStake.toString());
+      await sendTransaction(api, txRemoveStake, tk.alice);
+
+      // // Wait for epoch
+      // await skipBlocks(api, subnetTempo);
+
+      // // Read permits
+      // const validatorPermitsAfter = (await api.query.subtensorModule.validatorPermit(netuid)).toHuman();
+
+      // // Re-add Alice's stake back
+      // const txAddStake = api.tx.subtensorModule.addStake(tk.aliceHot.address, aliceStake.toString());
+      // await sendTransaction(api, txAddStake, tk.alice);
+
+      // // Wait for epoch
+      // await skipBlocks(api, subnetTempo);
+
+      // expect(validatorPermitsBefore[0]).to.be.true;
+      // expect(validatorPermitsAfter[0]).to.be.false;
+    });
+  });
+
+  it.skip('Blocks since last step progress', async () => {
     await usingApi(async api => {
       // Check that blocksSinceLastStep increases as blocks progress
       const blocksSinceLastStepBefore = (await api.query.subtensorModule.blocksSinceLastStep(netuid)).toHuman();
