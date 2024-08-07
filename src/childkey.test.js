@@ -154,17 +154,36 @@ describe('Childkeys', () => {
 
   it('Pending emissions are accumulated', async () => {
     await usingApi(async api => {
-      // Wait for pending emissions for subnet to become 0
-      while ((await api.query.subtensorModule.pendingEmission(netuid)).toHuman() != 0) {
-        await skipBlocks(api, 1);
-      }
-
-      // Wait for pending emission
+      // To avoid waiting for pending emission to drain, we'll read it three times: e(1), e(2), e(3). In most cases 
+      // it will be: e(1) < e(2), but in rare cases when emission is drained after first reading, e(2) == 0, so 
+      // it will be e(2) < e(3) 
+      const pendingEmission1 = (await api.query.subtensorModule.pendingEmission(netuid)).toNumber();
       await skipBlocks(api, 1);
+      const pendingEmission2 = (await api.query.subtensorModule.pendingEmission(netuid)).toNumber();
+      await skipBlocks(api, 1);
+      const pendingEmission3 = (await api.query.subtensorModule.pendingEmission(netuid)).toNumber();
 
       // Check that pending emission increases
-      const pendingEmissionAfter = (await api.query.subtensorModule.pendingEmission(netuid)).toNumber();
-      expect(pendingEmissionAfter).to.be.greaterThan(0);
+      expect(
+        (pendingEmission1 < pendingEmission2) ||
+        (pendingEmission2 < pendingEmission3)
+      ).to.be.true;
+    });
+  });
+
+  it('Pending hotkey emissions are accumulated', async () => {
+    await usingApi(async api => {
+      const pendingHotkeyEmission1 = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.bobHot.address)).toNumber();
+      await skipBlocks(api, subnetTempo);
+      const pendingHotkeyEmission2 = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.bobHot.address)).toNumber();
+      await skipBlocks(api, subnetTempo);
+      const pendingHotkeyEmission3 = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.bobHot.address)).toNumber();
+
+      // Check that pending emission increases
+      expect(
+        (pendingHotkeyEmission1 < pendingHotkeyEmission2) ||
+        (pendingHotkeyEmission2 < pendingHotkeyEmission3)
+      ).to.be.true;
     });
   });
 
