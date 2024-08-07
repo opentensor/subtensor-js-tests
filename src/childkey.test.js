@@ -13,6 +13,7 @@ describe('Childkeys', () => {
   before(async () => {
     await usingApi(async api => {
       tk = getTestKeys();
+      const rootId = 0;
 
       // Create subnet 1 and add neurons to it if it doesn't exist
       const subnetExists = (await api.query.subtensorModule.networksAdded(netuid)).toHuman();
@@ -25,6 +26,8 @@ describe('Childkeys', () => {
 
         const txRegisterNeuron2 = api.tx.subtensorModule.burnedRegister(netuid, tk.bobHot.address);
         await sendTransaction(api, txRegisterNeuron2, tk.bob);
+      } else {
+        throw Error("Restart the network");
       }
 
       // Add stake for alice and bob if it is not added yet
@@ -52,9 +55,13 @@ describe('Childkeys', () => {
         api.tx.adminUtils.sudoSetWeightsSetRateLimit(netuid, 0)
       );
       await sendTransaction(api, txSudoSetWeightsRateLimit, tk.alice);
+      const txSudoSetWeightsRateLimitRoot = api.tx.sudo.sudo(
+        api.tx.adminUtils.sudoSetWeightsSetRateLimit(rootId, 0)
+      );
+      await sendTransaction(api, txSudoSetWeightsRateLimitRoot, tk.alice);
 
       // Allow to stake/unstake frequently
-      console.log(`Allow setting weights frequently`);
+      console.log(`Allow to stake frequently`);
       const txSudoSetStakingRateLimit = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetTargetStakesPerInterval(1000)
       );
@@ -86,6 +93,27 @@ describe('Childkeys', () => {
       console.log(`Bob sets weights`);
       const txSetWeights = api.tx.subtensorModule.setWeights(netuid, [0, 1], [65535, 65535], 0);
       await sendTransaction(api, txSetWeights, tk.bobHot);
+
+      // Register Bob in root subnet
+      console.log(`Register Bob in root`);
+      const txRootRegister = api.tx.subtensorModule.rootRegister(tk.bobHot.address);
+      await sendTransaction(api, txRootRegister, tk.bob);
+
+      // Bob also sets root weights
+      console.log(`Bob sets root weights`);
+      const txSetRootWeights = api.tx.subtensorModule.setRootWeights(rootId, tk.bobHot.address, [0, 1], [65535, 65535], 0);
+      await sendTransaction(api, txSetRootWeights, tk.bob);
+
+      // Wait until root epoch ends
+      console.log(`Waiting for root epoch...`);
+      const rootTempo = (await api.query.subtensorModule.tempo(0)).toNumber();
+      let endRootEpoch = false;
+      while (!endRootEpoch) {
+        const block = (await api.query.system.number()).toNumber();
+        endRootEpoch = (block % rootTempo) == 0;
+      }
+
+      console.log(`Setup done`);
     });
   });
 
@@ -123,4 +151,21 @@ describe('Childkeys', () => {
       expect(blocksSinceLastStepAfter).to.be.greaterThan(blocksSinceLastStepBefore);
     });
   });
+
+  it('Pending emissions are accumulated', async () => {
+    await usingApi(async api => {
+      // Wait for pending emissions for subnet to become 0
+      while ((await api.query.subtensorModule.pendingEmission(netuid)).toHuman() != 0) {
+        await skipBlocks(api, 1);
+      }
+
+      // Wait for pending emission
+      await skipBlocks(api, 1);
+
+      // Check that pending emission increases
+      const pendingEmissionAfter = (await api.query.subtensorModule.pendingEmission(netuid)).toNumber();
+      expect(pendingEmissionAfter).to.be.greaterThan(0);
+    });
+  });
+
 });
