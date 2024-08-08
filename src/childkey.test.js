@@ -13,6 +13,7 @@ const subnetTempo = 10;
 const hotkeyTempo = 20;
 let tk;
 let initialTempo; 
+let txChildkeyTakeRateLimit;
 
 describe('Childkeys', () => {
   before(async () => {
@@ -132,8 +133,16 @@ describe('Childkeys', () => {
         endRootEpoch = (block % rootTempo) == 0;
       }
 
-      // Read default tempo, it is used in rate limiting
+      // Read default tempo and child take rate limit
       initialTempo = api.consts.subtensorModule.initialTempo.toNumber();
+      txChildkeyTakeRateLimit = (await api.query.subtensorModule.txChildkeyTakeRateLimit()).toNumber();
+
+      // Tests expect that childkey take rate limit and initial tempo are short
+      if ((initialTempo >= 20) || (txChildkeyTakeRateLimit > initialTempo)) {
+        console.log("Tests expect local node running with fast-blocks feature");
+      }
+      expect(initialTempo < 20).to.be.true;
+      expect(txChildkeyTakeRateLimit <= initialTempo).to.be.true;
 
       console.log(`Setup done`);
     });
@@ -347,6 +356,72 @@ describe('Childkeys', () => {
     });
   });
 
+  it('Can set 0 child take', async () => {
+    await usingApi(async api => {
+      // Dave's hotkey should be associated with his coldkey - register a neuron if it doesn't exist for Dave
+      const daveIsRegistered = (await api.query.subtensorModule.isNetworkMember(tk.daveHot.address, netuid)).toHuman();
+      if (!daveIsRegistered) {
+        const txRegisterNeuron = api.tx.subtensorModule.burnedRegister(netuid, tk.daveHot.address);
+        await sendTransaction(api, txRegisterNeuron, tk.dave);
+      }
+
+      // Ensure child exists
+      await skipBlocks(api, 2 * initialTempo);
+      const txSetChildren1 = api.tx.subtensorModule.setChildren(tk.bobHot.address, netuid, [[0xFFFFFFFFFFFFFFFFn, tk.daveHot.address]]);
+      await sendTransaction(api, txSetChildren1, tk.bob);
+
+      // Set 0 child take
+      const txSetChildTake = api.tx.subtensorModule.setChildkeyTake(tk.daveHot.address, netuid, 0);
+      await sendTransaction(api, txSetChildTake, tk.dave);
+    });
+  });
+
+  it('Can set max child take', async () => {
+    await usingApi(async api => {
+      // Dave's hotkey should be associated with his coldkey - register a neuron if it doesn't exist for Dave
+      const daveIsRegistered = (await api.query.subtensorModule.isNetworkMember(tk.daveHot.address, netuid)).toHuman();
+      if (!daveIsRegistered) {
+        const txRegisterNeuron = api.tx.subtensorModule.burnedRegister(netuid, tk.daveHot.address);
+        await sendTransaction(api, txRegisterNeuron, tk.dave);
+      }
+
+      // Ensure child exists
+      await skipBlocks(api, 2 * initialTempo);
+      const txSetChildren1 = api.tx.subtensorModule.setChildren(tk.bobHot.address, netuid, [[0xFFFFFFFFFFFFFFFFn, tk.daveHot.address]]);
+      await sendTransaction(api, txSetChildren1, tk.bob);
+
+      // Read what's max child take
+      const maxChildTake = (await api.query.subtensorModule.maxChildkeyTake()).toNumber();
+
+      // Set max child take
+      const txSetChildTake = api.tx.subtensorModule.setChildkeyTake(tk.daveHot.address, netuid, maxChildTake);
+      await sendTransaction(api, txSetChildTake, tk.dave);
+    });
+  });
+
+  it('Cannot set child take over the limit', async () => {
+    await usingApi(async api => {
+      // Dave's hotkey should be associated with his coldkey - register a neuron if it doesn't exist for Dave
+      const daveIsRegistered = (await api.query.subtensorModule.isNetworkMember(tk.daveHot.address, netuid)).toHuman();
+      if (!daveIsRegistered) {
+        const txRegisterNeuron = api.tx.subtensorModule.burnedRegister(netuid, tk.daveHot.address);
+        await sendTransaction(api, txRegisterNeuron, tk.dave);
+      }
+
+      // Ensure child exists
+      await skipBlocks(api, 2 * initialTempo);
+      const txSetChildren1 = api.tx.subtensorModule.setChildren(tk.bobHot.address, netuid, [[0xFFFFFFFFFFFFFFFFn, tk.daveHot.address]]);
+      await sendTransaction(api, txSetChildren1, tk.bob);
+
+      // Read what's max child take
+      const maxChildTake = (await api.query.subtensorModule.maxChildkeyTake()).toNumber();
+
+      // Set max+1 child take
+      const txSetChildTake = api.tx.subtensorModule.setChildkeyTake(tk.daveHot.address, netuid, maxChildTake + 1);
+      return expectToFailWith(api, () => sendTransaction(api, txSetChildTake, tk.dave), "InvalidChildkeyTake");
+    });
+  });
+
   // TODO: More tests:
   // + - Test with validator limit. Child should replace parent.
   // + - Setting children rate limit tests
@@ -355,9 +430,9 @@ describe('Childkeys', () => {
   // +   - Waiting 2 tempos fails
   // +   - Waiting 2 tempos + 1 block succeeds
   // - Childkey take tests
-  //   - Can set 0 take
-  //   - Can set max take
-  //   - Can't set max+1 take
+  // +  - Can set 0 take
+  // +  - Can set max take
+  // +  - Can't set max+1 take
   //   - 0 take results in 0 child reward 
   //   - max take results in non-zero child reward and reduces parent reward
   //   - For 0 take: emission fully goes to parent's PendingHotkeyEmission (end of epoch)
@@ -369,4 +444,8 @@ describe('Childkeys', () => {
   //   - Parent nominators are rewarded, the sum of rewards is equal to PendingHotkeyEmission
   // - Stress tests
   //   - 10k parent keys, 50k child keys, epoch, hotkey drain, and timing
+
+  // - Childkey take rate limiting
+  //   - 
+
 });
