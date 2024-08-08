@@ -1,5 +1,6 @@
-import { WsProvider, ApiPromise } from "@polkadot/api";
-import { WS_ENDPOINT, CONN_TIMEOUT } from '../config.js';
+import { expect, use } from 'chai';
+import chaiAsPromised from 'chai-as-promised';
+use(chaiAsPromised);
 
 async function decodeError(api, error) {
   // Parse the error if it's in string form
@@ -40,6 +41,19 @@ export async function usingApi(action) {
     console.log(humanReadableErr);
     throw Error(humanReadableErr);
   }
+}
+
+export function expectToFailWith(api, call, err) {
+  const wrapped = async () => {
+    try {
+      await call();
+    } catch (e) {
+      const humanReadableErr = await decodeError(api, e);
+      throw Error(humanReadableErr);
+    }
+  };
+
+  return expect(wrapped()).to.be.rejectedWith(Error, err);
 }
 
 export function sendTransaction(api, call, signer) {
