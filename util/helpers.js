@@ -1,5 +1,6 @@
 import { getTestKeys } from '../util/known-keys.js';
 import { sendTransaction, skipBlocks } from './comm.js';
+import { waitForStakeIncrease } from '../util/waiters.js';
 
 export async function daveIsNeuron(api, netuid) {
   const tk = getTestKeys();
@@ -26,5 +27,21 @@ export async function daveIsBobsChild(api, netuid, initialTempo) {
     // Bob makes Dave his only child
     const txSetChildren = api.tx.subtensorModule.setChildren(tk.bobHot.address, netuid, [[0xFFFFFFFFFFFFFFFFn, tk.daveHot.address]]);
     await sendTransaction(api, txSetChildren, tk.bob);
+  }
+}
+
+export async function reliableUnstake(api, hotkey, signer, hotkeyTempo) {
+  while (true) {
+    const currentStake = (await api.query.subtensorModule.stake(hotkey, signer.address)).toNumber();
+    if (currentStake > 0) {
+      const txRemoveStake = api.tx.subtensorModule.removeStake(hotkey, currentStake.toString());
+      await sendTransaction(api, txRemoveStake, signer);
+    }
+
+    try {
+      await waitForStakeIncrease(api, hotkeyTempo, hotkey, signer.address);
+    } catch (e) {
+      break;
+    }
   }
 }
