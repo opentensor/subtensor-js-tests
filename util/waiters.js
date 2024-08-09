@@ -20,3 +20,35 @@ export async function waitForStakeIncrease(api, hotkeyTempo, hotkey, coldkey) {
     }
   }
 }
+
+export async function waitForNonZero(call, timeout) {
+  let blockCount = 0;
+  while (true) {
+    const value = (await call()).toNumber();
+    if (value > 0) {
+      break;
+    }
+
+    await skipBlocks(api, 1);
+    blockCount++;
+    if (blockCount > timeout) {
+      throw Error("Timeout waiting for a non-zero value");
+    }
+  }
+}
+
+export async function ensureAlwaysZero(call, timeout) {
+  let blockCount = 0;
+  while (true) {
+    const value = (await call()).toNumber();
+    if (value > 0) {
+      throw Error("Received a non-zero value while expecting it to always be zero");
+    }
+
+    await skipBlocks(api, 1);
+    blockCount++;
+    if (blockCount > timeout) {
+      break;
+    }
+  }
+}

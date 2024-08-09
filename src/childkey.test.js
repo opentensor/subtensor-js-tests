@@ -1,8 +1,9 @@
 import { expectToFailWith, usingApi, sendTransaction, skipBlocks } from '../util/comm.js';
 import { expect, use } from 'chai';
 import chaiAsPromised from 'chai-as-promised';
+import { daveIsNeuron, daveIsBobsChild } from '../util/helpers.js';
 import { getTestKeys } from '../util/known-keys.js';
-import { waitForStakeIncrease } from '../util/waiters.js';
+import { waitForStakeIncrease, waitForNonZero, ensureAlwaysZero } from '../util/waiters.js';
 import BigNumber from 'bignumber.js';
 
 use(chaiAsPromised);
@@ -11,9 +12,32 @@ const netuid = 1;
 const stake = new BigNumber(10e9);
 const subnetTempo = 10;
 const hotkeyTempo = 20;
+const maxChildTake = parseInt(0xFFFF / 2);
 let tk;
 let initialTempo; 
 let txChildkeyTakeRateLimit;
+
+async function setStake(api, hotkey, signer, desiredAmount) {
+  const currentStake = (await api.query.subtensorModule.stake(hotkey, signer.address)).toNumber();
+  if (currentStake < desiredAmount) {
+    // Add stake for hotkey if it is not added yet
+    console.log(`Adding stake for ${hotkey}`);
+    const txAddStake = api.tx.subtensorModule.addStake(hotkey, (desiredAmount - currentStake).toString());
+    await sendTransaction(api, txAddStake, signer);
+  } else if (currentStake > desiredAmount) {
+    // Remove stake from hotkey if it has extra stake
+    const txRemoveStake = api.tx.subtensorModule.removeStake(hotkey, (currentStake - desiredAmount).toString());
+    await sendTransaction(api, txRemoveStake, signer);
+  }
+}
+
+async function setupStartingStake(api) {
+  await setStake(api, tk.aliceHot.address, tk.alice, stake);
+  await setStake(api, tk.bobHot.address, tk.bob, stake);
+  await setStake(api, tk.charlieHot.address, tk.charlie, 0);
+  await setStake(api, tk.daveHot.address, tk.dave, 0);
+  await setStake(api, tk.bobHot.address, tk.eve, 0);
+}
 
 describe('Childkeys', () => {
   before(async () => {
@@ -37,23 +61,7 @@ describe('Childkeys', () => {
       }
 
       // Add stake for alice and bob if it is not added yet
-      const aliceStake = (await api.query.subtensorModule.stake(tk.aliceHot.address, tk.alice.address)).toNumber();
-      if (aliceStake == 0) {
-        console.log(`Adding stake for Alice`);
-        const txAddStake = api.tx.subtensorModule.addStake(tk.aliceHot.address, stake.toString());
-        await sendTransaction(api, txAddStake, tk.alice);
-      } else {
-        console.log(`Alice already has stake: ${aliceStake}`);
-      }
-
-      const bobStake = (await api.query.subtensorModule.stake(tk.bobHot.address, tk.bob.address)).toNumber();
-      if (bobStake == 0) {
-        console.log(`Adding stake for Bob`);
-        const txAddStake = api.tx.subtensorModule.addStake(tk.bobHot.address, stake.toString());
-        await sendTransaction(api, txAddStake, tk.bob);
-      } else {
-        console.log(`Bob already has stake: ${bobStake}`);
-      }
+      await setupStartingStake(api);
 
       // Allow setting weights frequently
       console.log(`Allow setting weights frequently`);
@@ -79,6 +87,13 @@ describe('Childkeys', () => {
         api.tx.adminUtils.sudoSetTargetRegistrationsPerInterval(netuid, 1000)
       );
       await sendTransaction(api, txSudoSetRegistrationRateLimit, tk.alice);
+
+      // Allow to stake/unstake frequently
+      console.log(`Disable tx rate limit`);
+      const txSudoSetTxRateLimit = api.tx.sudo.sudo(
+        api.tx.adminUtils.sudoSetTxRateLimit(0)
+      );
+      await sendTransaction(api, txSudoSetTxRateLimit, tk.alice);
 
       // Reduce subnet tempo
       console.log(`Reduce subnet tempo`);
@@ -143,6 +158,13 @@ describe('Childkeys', () => {
       }
       expect(initialTempo < 20).to.be.true;
       expect(txChildkeyTakeRateLimit <= initialTempo).to.be.true;
+
+      // Set max childkey take
+      console.log(`Set max childkey take`);
+      const txSudoSetMaxChildkeyTake = api.tx.sudo.sudo(
+        api.tx.subtensorModule.sudoSetMaxChildkeyTake(maxChildTake)
+      );
+      await sendTransaction(api, txSudoSetMaxChildkeyTake, tk.alice);
 
       console.log(`Setup done`);
     });
@@ -263,16 +285,10 @@ describe('Childkeys', () => {
     await usingApi(async api => {
       // Get neuron count
       const neuronCount = (await api.query.subtensorModule.subnetworkN(netuid)).toHuman();
-      let daveUid = neuronCount-1;
       let bobUid = 1;
 
       // Ensure Dave is registered as a neuron
-      const daveIsRegistered = (await api.query.subtensorModule.isNetworkMember(tk.daveHot.address, netuid)).toHuman();
-      if (!daveIsRegistered) {
-        const txRegisterNeuron = api.tx.subtensorModule.burnedRegister(netuid, tk.daveHot.address);
-        await sendTransaction(api, txRegisterNeuron, tk.dave);
-        daveUid = neuronCount;
-      }
+      await daveIsNeuron(api, netuid);
 
       // Get initialValidatorPermits
       const validatorPermitsBefore = (await api.query.subtensorModule.validatorPermit(netuid)).toHuman();
@@ -359,11 +375,7 @@ describe('Childkeys', () => {
   it('Can set 0 child take', async () => {
     await usingApi(async api => {
       // Dave's hotkey should be associated with his coldkey - register a neuron if it doesn't exist for Dave
-      const daveIsRegistered = (await api.query.subtensorModule.isNetworkMember(tk.daveHot.address, netuid)).toHuman();
-      if (!daveIsRegistered) {
-        const txRegisterNeuron = api.tx.subtensorModule.burnedRegister(netuid, tk.daveHot.address);
-        await sendTransaction(api, txRegisterNeuron, tk.dave);
-      }
+      await daveIsNeuron(api, netuid);
 
       // Ensure child exists
       await skipBlocks(api, 2 * initialTempo);
@@ -379,11 +391,7 @@ describe('Childkeys', () => {
   it('Can set max child take', async () => {
     await usingApi(async api => {
       // Dave's hotkey should be associated with his coldkey - register a neuron if it doesn't exist for Dave
-      const daveIsRegistered = (await api.query.subtensorModule.isNetworkMember(tk.daveHot.address, netuid)).toHuman();
-      if (!daveIsRegistered) {
-        const txRegisterNeuron = api.tx.subtensorModule.burnedRegister(netuid, tk.daveHot.address);
-        await sendTransaction(api, txRegisterNeuron, tk.dave);
-      }
+      await daveIsNeuron(api, netuid);
 
       // Ensure child exists
       await skipBlocks(api, 2 * initialTempo);
@@ -402,11 +410,7 @@ describe('Childkeys', () => {
   it('Cannot set child take over the limit', async () => {
     await usingApi(async api => {
       // Dave's hotkey should be associated with his coldkey - register a neuron if it doesn't exist for Dave
-      const daveIsRegistered = (await api.query.subtensorModule.isNetworkMember(tk.daveHot.address, netuid)).toHuman();
-      if (!daveIsRegistered) {
-        const txRegisterNeuron = api.tx.subtensorModule.burnedRegister(netuid, tk.daveHot.address);
-        await sendTransaction(api, txRegisterNeuron, tk.dave);
-      }
+      await daveIsNeuron(api, netuid);
 
       // Ensure child exists
       await skipBlocks(api, 2 * initialTempo);
@@ -422,6 +426,180 @@ describe('Childkeys', () => {
     });
   });
 
+  it('Zero child take results in zero child rewards', async () => {
+    await usingApi(async api => {
+      // Ensure Dave is registered as a neuron
+      const daveUid = await daveIsNeuron(api, netuid);
+
+      // Allow all neurons to be validaotrs
+      const neuronCount = (await api.query.subtensorModule.subnetworkN(netuid)).toNumber();
+      const txSudoSetMaxAllowedValidators = api.tx.sudo.sudo(
+        api.tx.adminUtils.sudoSetMaxAllowedValidators(netuid, neuronCount)
+      );
+      await sendTransaction(api, txSudoSetMaxAllowedValidators, tk.alice);
+
+      // Wait for subnet tempo
+      await skipBlocks(api, subnetTempo);
+
+      // Alice and Bob set weights to down-vote Dave so that he doesn't get any miner rewards
+      let uids = [];
+      let weights = [];
+      for (let i=0; i<neuronCount; i++) {
+        uids.push(i);
+        if (i == daveUid) {
+          weights.push(0);
+        } else {
+          weights.push(0xFFFF);
+        }
+      }
+      const txSetWeightsAlice = api.tx.subtensorModule.setWeights(netuid, uids, weights, 0);
+      await sendTransaction(api, txSetWeightsAlice, tk.aliceHot);
+      const txSetWeightsBob = api.tx.subtensorModule.setWeights(netuid, uids, weights, 0);
+      await sendTransaction(api, txSetWeightsBob, tk.bobHot);
+
+      // Wait for two subnet tempos
+      await skipBlocks(api, subnetTempo * 2);
+
+      // Bob makes Dave his only child (if not already)
+      await daveIsBobsChild(api, netuid, initialTempo);
+
+      // Dave sets zero take
+      await skipBlocks(api, initialTempo * 2);
+      const txSetChildTake = api.tx.subtensorModule.setChildkeyTake(tk.daveHot.address, netuid, 0);
+      await sendTransaction(api, txSetChildTake, tk.dave);
+
+      // Wait for two hotkey drain tempos
+      await skipBlocks(api, hotkeyTempo * 2);
+
+      // Unstake Dave
+      await setStake(api, tk.daveHot.address, tk.dave, 0);
+
+      // Wait for two hotkey drain tempos
+      await skipBlocks(api, hotkeyTempo * 2);
+
+      // Unstake Dave again (there might be PendingEmission / PendingHotkeyEmission buffer)
+      await setStake(api, tk.daveHot.address, tk.dave, 0);
+
+      // Wait for two hotkey drain tempos
+      await skipBlocks(api, hotkeyTempo * 2);
+      
+      // Check that Dave's stake is not increased
+      const davesStake = (await api.query.subtensorModule.stake(tk.daveHot.address, tk.dave.address)).toNumber();
+      expect(davesStake).to.be.equal(0);
+    });
+  });
+
+  it('Childkey delegate take does not add to zero child rewards', async () => {
+    await usingApi(async api => {
+      // Ensure Dave is registered as a neuron
+      await daveIsNeuron(api, netuid);
+
+      // Bob makes Dave his only child (if not already)
+      await daveIsBobsChild(api, netuid, initialTempo);
+
+      // Dave sets zero childkey take
+      await skipBlocks(api, initialTempo * 2);
+      const txSetChildTake = api.tx.subtensorModule.setChildkeyTake(tk.daveHot.address, netuid, 0);
+      await sendTransaction(api, txSetChildTake, tk.dave);
+
+      // Dave sets non-zero hotkey take
+      const txBecomeDelegate = api.tx.subtensorModule.becomeDelegate(tk.daveHot.address);
+      await sendTransaction(api, txBecomeDelegate, tk.dave);
+
+      // Wait for two hotkey drain tempos
+      await skipBlocks(api, hotkeyTempo * 2);
+
+      // Check that Dave's stake is not increased
+      const davesStake = (await api.query.subtensorModule.stake(tk.daveHot.address, tk.dave.address)).toNumber();
+      expect(davesStake).to.be.equal(0);
+    });
+  });
+
+  it('Max child take results in non-zero child reward', async () => {
+    await usingApi(async api => {
+      // Ensure Dave is registered as a neuron
+      await daveIsNeuron(api, netuid);
+
+      // Bob makes Dave his only child (if not already)
+      await daveIsBobsChild(api, netuid, initialTempo);
+
+      // Dave sets zero childkey take
+      await skipBlocks(api, initialTempo * 2);
+      const txSetChildTake0 = api.tx.subtensorModule.setChildkeyTake(tk.daveHot.address, netuid, 0);
+      await sendTransaction(api, txSetChildTake0, tk.dave);
+
+      // Wait for two hotkey drain tempos
+      await skipBlocks(api, hotkeyTempo * 2);
+
+      // Dave sets max childkey take
+      const txSetChildTakeMax = api.tx.subtensorModule.setChildkeyTake(tk.daveHot.address, netuid, maxChildTake);
+      await sendTransaction(api, txSetChildTakeMax, tk.dave);
+
+      // Wait for two hotkey drain tempos
+      await skipBlocks(api, hotkeyTempo * 2);
+
+      // Check that Dave's stake is increased
+      const davesStake = (await api.query.subtensorModule.stake(tk.daveHot.address, tk.dave.address)).toNumber();
+      expect(davesStake).to.be.greaterThan(0);
+    });
+  });
+
+  it('Zero child take, only parents PendingHotkeyEmission increased', async () => {
+    await usingApi(async api => {
+      // Ensure Dave is registered as a neuron
+      await daveIsNeuron(api, netuid);
+
+      // Unstake Dave
+      await setStake(api, tk.daveHot.address, tk.dave, 0);
+
+      // Bob makes Dave his only child (if not already)
+      await daveIsBobsChild(api, netuid, initialTempo);
+
+      // Dave sets zero take
+      await skipBlocks(api, initialTempo * 2);
+      const txSetChildTake = api.tx.subtensorModule.setChildkeyTake(tk.daveHot.address, netuid, 0);
+      await sendTransaction(api, txSetChildTake, tk.dave);
+
+      // Wait for 4 subnet tempos
+      await skipBlocks(api, subnetTempo * 4);
+
+      // Check that Dave's PendingEmission is not increased, and Bob'd increased
+      const davePeCall = async () => { return await api.query.subtensorModule.pendingdHotkeyEmission(tk.daveHot.address); };
+      const bobPeCall = async () => { return await api.query.subtensorModule.pendingdHotkeyEmission(tk.bobHot.address); };
+
+      await ensureAlwaysZero(davePeCall, subnetTempo);
+      await waitForNonZero(bobPeCall, subnetTempo);
+    });
+  });
+
+  it('Non-zero child take, both child and parent PendingHotkeyEmission increased', async () => {
+    await usingApi(async api => {
+      // Ensure Dave is registered as a neuron
+      await daveIsNeuron(api, netuid);
+
+      // Unstake Dave
+      await setStake(api, tk.daveHot.address, tk.dave, 0);
+
+      // Bob makes Dave his only child (if not already)
+      await daveIsBobsChild(api, netuid, initialTempo);
+
+      // Dave sets max take
+      await skipBlocks(api, initialTempo * 2);
+      const txSetChildTake = api.tx.subtensorModule.setChildkeyTake(tk.daveHot.address, netuid, maxChildTake);
+      await sendTransaction(api, txSetChildTake, tk.dave);
+
+      // Wait for two subnet tempos
+      await skipBlocks(api, subnetTempo * 4);
+
+      // Check that both Dave's and Bob's PendingEmission are increased
+      const davePeCall = async () => { return await api.query.subtensorModule.pendingdHotkeyEmission(tk.daveHot.address); };
+      const bobPeCall = async () => { return await api.query.subtensorModule.pendingdHotkeyEmission(tk.bobHot.address); };
+
+      await waitForNonZero(davePeCall, subnetTempo);
+      await waitForNonZero(bobPeCall, subnetTempo);
+    });
+  });
+
   // TODO: More tests:
   // + - Test with validator limit. Child should replace parent.
   // + - Setting children rate limit tests
@@ -433,10 +611,10 @@ describe('Childkeys', () => {
   // +  - Can set 0 take
   // +  - Can set max take
   // +  - Can't set max+1 take
-  //   - 0 take results in 0 child reward 
-  //   - max take results in non-zero child reward and reduces parent reward
-  //   - For 0 take: emission fully goes to parent's PendingHotkeyEmission (end of epoch)
-  //   - For max take: emission goes to child's and to parent's PendingHotkeyEmission (end of epoch)
+  // +  - 0 take results in 0 child reward 
+  // +  - max take results in non-zero child reward (and reduces parent reward)
+  // +  - For 0 take: emission fully goes to parent's PendingHotkeyEmission (end of epoch)
+  // +  - For max take: emission goes to child's and to parent's PendingHotkeyEmission (end of epoch)
   //   - One parent, two children with unequal proportions, with equal take => PendingHotkeyEmission checks for all three keys
   //   - Two parents, one common child with unequal proportions => PendingHotkeyEmission checks
   // - Nominator rewards (end of hotkey drain tempo)
@@ -445,7 +623,10 @@ describe('Childkeys', () => {
   // - Stress tests
   //   - 10k parent keys, 50k child keys, epoch, hotkey drain, and timing
 
+  // And even more tests:
   // - Childkey take rate limiting
   //   - 
+  // - Set childkey take for a non-child
+  // 
 
 });
