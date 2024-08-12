@@ -1,43 +1,19 @@
 import { expectToFailWith, usingApi, sendTransaction, skipBlocks } from '../util/comm.js';
 import { expect, use } from 'chai';
 import chaiAsPromised from 'chai-as-promised';
-import { daveIsNeuron, daveIsBobsChild, reliableUnstake } from '../util/helpers.js';
+import { 
+  charlieIsNeuron, daveIsNeuron, daveIsBobsChild, reliableUnstake, setChildren, 
+  setStake, setupStartingStake, resetSut 
+} from '../util/helpers.js';
 import { getTestKeys } from '../util/known-keys.js';
 import { waitForStakeIncrease, waitForNonZero, ensureAlwaysZero } from '../util/waiters.js';
-import BigNumber from 'bignumber.js';
+import { netuid, stake, subnetTempo, hotkeyTempo, maxChildTake } from '../config.js';
 
 use(chaiAsPromised);
 
-const netuid = 1;
-const stake = new BigNumber(10e9);
-const subnetTempo = 10;
-const hotkeyTempo = 20;
-const maxChildTake = parseInt(0xFFFF / 2);
 let tk;
 let initialTempo; 
 let txChildkeyTakeRateLimit;
-
-async function setStake(api, hotkey, signer, desiredAmount) {
-  const currentStake = (await api.query.subtensorModule.stake(hotkey, signer.address)).toNumber();
-  if (currentStake < desiredAmount) {
-    // Add stake for hotkey if it is not added yet
-    console.log(`Adding stake for ${hotkey}`);
-    const txAddStake = api.tx.subtensorModule.addStake(hotkey, (desiredAmount - currentStake).toString());
-    await sendTransaction(api, txAddStake, signer);
-  } else if (currentStake > desiredAmount) {
-    // Remove stake from hotkey if it has extra stake
-    const txRemoveStake = api.tx.subtensorModule.removeStake(hotkey, (currentStake - desiredAmount).toString());
-    await sendTransaction(api, txRemoveStake, signer);
-  }
-}
-
-async function setupStartingStake(api) {
-  await setStake(api, tk.aliceHot.address, tk.alice, stake);
-  await setStake(api, tk.bobHot.address, tk.bob, stake);
-  await setStake(api, tk.charlieHot.address, tk.charlie, 0);
-  await setStake(api, tk.daveHot.address, tk.dave, 0);
-  await setStake(api, tk.bobHot.address, tk.eve, 0);
-}
 
 describe('Childkeys', () => {
   before(async () => {
@@ -103,7 +79,7 @@ describe('Childkeys', () => {
       await sendTransaction(api, txSudoSetTempo, tk.alice);
 
       // Reduce root tempo
-      console.log(`Reduce subnet tempo`);
+      console.log(`Reduce root tempo`);
       const txSudoSetTempoRoot = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetTempo(rootId, subnetTempo)
       );
@@ -610,6 +586,130 @@ describe('Childkeys', () => {
       await waitForNonZero(bobPeCall, subnetTempo);
     });
   });
+
+  it('One parent, two children with unequal proportions', async () => {
+    await usingApi(async api => {
+      // await resetSut(api);
+
+      // Ensure Charlie and Dave are registered as neurons
+      const charlieUid = await charlieIsNeuron(api, netuid);
+      const daveUid = await daveIsNeuron(api, netuid);
+      const bobUid = 1;
+      const neuronCount = (await api.query.subtensorModule.subnetworkN(netuid)).toHuman();
+
+      // Everyone is a validator
+      const txSudoSetMaxAllowedValidators = api.tx.sudo.sudo(
+        api.tx.adminUtils.sudoSetMaxAllowedValidators(netuid, neuronCount)
+      );
+      await sendTransaction(api, txSudoSetMaxAllowedValidators, tk.alice);
+
+      // Wait for two subnet tempos
+      await skipBlocks(api, subnetTempo * 2);
+
+      // Everyone sets weights to down-vote Bob, Charlie, and Dave so that they dont get any miner rewards
+      let uids = [];
+      let weights = [];
+      for (let i=0; i<neuronCount; i++) {
+        uids.push(i);
+        if ((i == daveUid) || (i == charlieUid) || (i == bobUid)) {
+          weights.push(0);
+        } else {
+          weights.push(0xFFFF);
+        }
+      }
+      const txSetWeightsAlice = api.tx.subtensorModule.setWeights(netuid, uids, weights, 0);
+      await sendTransaction(api, txSetWeightsAlice, tk.aliceHot);
+      const txSetWeightsBob = api.tx.subtensorModule.setWeights(netuid, uids, weights, 0);
+      await sendTransaction(api, txSetWeightsBob, tk.bobHot);
+      const txSetWeightsCharlie = api.tx.subtensorModule.setWeights(netuid, uids, weights, 0);
+      await sendTransaction(api, txSetWeightsCharlie, tk.charlieHot);
+      const txSetWeightsDave = api.tx.subtensorModule.setWeights(netuid, uids, weights, 0);
+      await sendTransaction(api, txSetWeightsDave, tk.daveHot);
+
+      // Wait for two subnet tempos
+      await skipBlocks(api, subnetTempo * 2);
+
+      // Bob makes Dave and Charlie his only children with 1/4 and 3/4 proportions
+      // await setChildren(
+      //   api, netuid, tk.aliceHot.address, tk.alice, 
+      //   [[0x4000000000000000n, tk.charlieHot.address], [0x3FFFFFFFFFFFFFFFn, tk.daveHot.address]], 
+      //   initialTempo
+      // );
+      await setChildren(
+        api, netuid, tk.aliceHot.address, tk.alice, 
+        [[0x3FFFFFFFFFFFFFFFn, tk.charlieHot.address], [0x4000000000000000n, tk.daveHot.address]], 
+        initialTempo
+      );
+
+      // Both Charlie and Dave set max take
+      await skipBlocks(api, initialTempo * 2);
+      const txSetChildTake1 = api.tx.subtensorModule.setChildkeyTake(tk.charlieHot.address, netuid, maxChildTake);
+      await sendTransaction(api, txSetChildTake1, tk.charlie);
+      await skipBlocks(api, initialTempo * 2);
+      const txSetChildTake2 = api.tx.subtensorModule.setChildkeyTake(tk.daveHot.address, netuid, maxChildTake);
+      await sendTransaction(api, txSetChildTake2, tk.dave);
+
+      // Never drain hotkeys
+      const txSudoHotkeyEmissionTempoNever = api.tx.sudo.sudo(
+        api.tx.adminUtils.sudoSetHotkeyEmissionTempo(1000000)
+      );
+      await sendTransaction(api, txSudoHotkeyEmissionTempoNever, tk.alice);
+
+      // Check that Charlie's, Dave's and Bob's Pending Emissions are increased proportionally
+      // Bob doesn't have his own emission, he gets everything from his childkeys, so we update Bobs emission
+      // every time when Dave and Charlie get theirs.
+      // let firstBobsEmission = 0;
+      // let firstCharliesEmission = 0;
+      // let firstDavesEmission = 0;
+      // while (true) {
+      //   const bobPendingHotkeyEmission = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.bobHot.address)).toNumber();
+      //   const charliePendingHotkeyEmission = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.charlieHot.address)).toNumber();
+      //   const davePendingHotkeyEmission = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.daveHot.address)).toNumber();
+
+      //   if ((charliePendingHotkeyEmission != 0) && (firstCharliesEmission == 0)) {
+      //     firstCharliesEmission = charliePendingHotkeyEmission;
+      //     firstBobsEmission = bobPendingHotkeyEmission;
+      //   }
+      //   if ((davePendingHotkeyEmission != 0) && (firstDavesEmission == 0)) {
+      //     firstDavesEmission = davePendingHotkeyEmission;
+      //     firstBobsEmission = bobPendingHotkeyEmission;
+      //   }
+
+      //   if (
+      //     (firstBobsEmission > 0) && 
+      //     (firstCharliesEmission > 0) &&
+      //     (firstDavesEmission > 0)
+      //   ) {
+      //     break;
+      //   }
+
+      //   await skipBlocks(api, 1);
+      // }
+
+      // console.log(`bobPendingHotkeyEmission     = ${firstBobsEmission}`);
+      // console.log(`charliePendingHotkeyEmission = ${firstCharliesEmission}`);
+      // console.log(`davePendingHotkeyEmission    = ${firstDavesEmission}`);
+
+      await skipBlocks(api, subnetTempo * 100);
+
+      const bobPendingHotkeyEmission = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.bobHot.address)).toNumber();
+      const charliePendingHotkeyEmission = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.charlieHot.address)).toNumber();
+      const davePendingHotkeyEmission = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.daveHot.address)).toNumber();
+
+      console.log(`bobPendingHotkeyEmission     = ${bobPendingHotkeyEmission}`);
+      console.log(`charliePendingHotkeyEmission = ${charliePendingHotkeyEmission}`);
+      console.log(`davePendingHotkeyEmission    = ${davePendingHotkeyEmission}`);
+
+
+      // Restore setup - reduce hotkey drain tempo
+      const txSudoHotkeyEmissionTempo = api.tx.sudo.sudo(
+        api.tx.adminUtils.sudoSetHotkeyEmissionTempo(hotkeyTempo)
+      );
+      await sendTransaction(api, txSudoHotkeyEmissionTempo, tk.alice);
+
+    });
+  });
+
 
   // TODO: More tests:
   // + - Test with validator limit. Child should replace parent.
