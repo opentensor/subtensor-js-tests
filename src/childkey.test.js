@@ -587,9 +587,12 @@ describe('Childkeys', () => {
     });
   });
 
-  it('One parent, two children with unequal proportions', async () => {
+  it.only('One parent, two children with unequal proportions', async () => {
     await usingApi(async api => {
       // await resetSut(api);
+      console.log(`Bob hot: ${tk.bobHot.address}`);
+      console.log(`Charlie hot: ${tk.charlieHot.address}`);
+      console.log(`Dave hot: ${tk.daveHot.address}`);
 
       // Ensure Charlie and Dave are registered as neurons
       const charlieUid = await charlieIsNeuron(api, netuid);
@@ -629,12 +632,7 @@ describe('Childkeys', () => {
       // Wait for two subnet tempos
       await skipBlocks(api, subnetTempo * 2);
 
-      // Bob makes Dave and Charlie his only children with 1/4 and 3/4 proportions
-      // await setChildren(
-      //   api, netuid, tk.aliceHot.address, tk.alice, 
-      //   [[0x4000000000000000n, tk.charlieHot.address], [0x3FFFFFFFFFFFFFFFn, tk.daveHot.address]], 
-      //   initialTempo
-      // );
+      // Bob makes Dave and Charlie his only children with 3/4 and 1/4 proportions
       await setChildren(
         api, netuid, tk.aliceHot.address, tk.alice, 
         [[0x3FFFFFFFFFFFFFFFn, tk.charlieHot.address], [0x4000000000000000n, tk.daveHot.address]], 
@@ -655,51 +653,23 @@ describe('Childkeys', () => {
       );
       await sendTransaction(api, txSudoHotkeyEmissionTempoNever, tk.alice);
 
-      // Check that Charlie's, Dave's and Bob's Pending Emissions are increased proportionally
-      // Bob doesn't have his own emission, he gets everything from his childkeys, so we update Bobs emission
-      // every time when Dave and Charlie get theirs.
-      // let firstBobsEmission = 0;
-      // let firstCharliesEmission = 0;
-      // let firstDavesEmission = 0;
-      // while (true) {
-      //   const bobPendingHotkeyEmission = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.bobHot.address)).toNumber();
-      //   const charliePendingHotkeyEmission = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.charlieHot.address)).toNumber();
-      //   const davePendingHotkeyEmission = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.daveHot.address)).toNumber();
+      const bobPendingHotkeyEmissionBefore = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.bobHot.address)).toNumber();
+      const charliePendingHotkeyEmissionBefore = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.charlieHot.address)).toNumber();
+      const davePendingHotkeyEmissionBefore = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.daveHot.address)).toNumber();
 
-      //   if ((charliePendingHotkeyEmission != 0) && (firstCharliesEmission == 0)) {
-      //     firstCharliesEmission = charliePendingHotkeyEmission;
-      //     firstBobsEmission = bobPendingHotkeyEmission;
-      //   }
-      //   if ((davePendingHotkeyEmission != 0) && (firstDavesEmission == 0)) {
-      //     firstDavesEmission = davePendingHotkeyEmission;
-      //     firstBobsEmission = bobPendingHotkeyEmission;
-      //   }
+      await skipBlocks(api, subnetTempo * 20);
 
-      //   if (
-      //     (firstBobsEmission > 0) && 
-      //     (firstCharliesEmission > 0) &&
-      //     (firstDavesEmission > 0)
-      //   ) {
-      //     break;
-      //   }
+      const bobPendingHotkeyEmissionAfter = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.bobHot.address)).toNumber();
+      const charliePendingHotkeyEmissionAfter = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.charlieHot.address)).toNumber();
+      const davePendingHotkeyEmissionAfter = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.daveHot.address)).toNumber();
 
-      //   await skipBlocks(api, 1);
-      // }
-
-      // console.log(`bobPendingHotkeyEmission     = ${firstBobsEmission}`);
-      // console.log(`charliePendingHotkeyEmission = ${firstCharliesEmission}`);
-      // console.log(`davePendingHotkeyEmission    = ${firstDavesEmission}`);
-
-      await skipBlocks(api, subnetTempo * 100);
-
-      const bobPendingHotkeyEmission = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.bobHot.address)).toNumber();
-      const charliePendingHotkeyEmission = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.charlieHot.address)).toNumber();
-      const davePendingHotkeyEmission = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.daveHot.address)).toNumber();
+      const bobPendingHotkeyEmission = bobPendingHotkeyEmissionAfter - bobPendingHotkeyEmissionBefore;
+      const charliePendingHotkeyEmission = charliePendingHotkeyEmissionAfter - charliePendingHotkeyEmissionBefore;
+      const davePendingHotkeyEmission = davePendingHotkeyEmissionAfter - davePendingHotkeyEmissionBefore;
 
       console.log(`bobPendingHotkeyEmission     = ${bobPendingHotkeyEmission}`);
       console.log(`charliePendingHotkeyEmission = ${charliePendingHotkeyEmission}`);
       console.log(`davePendingHotkeyEmission    = ${davePendingHotkeyEmission}`);
-
 
       // Restore setup - reduce hotkey drain tempo
       const txSudoHotkeyEmissionTempo = api.tx.sudo.sudo(
@@ -707,6 +677,15 @@ describe('Childkeys', () => {
       );
       await sendTransaction(api, txSudoHotkeyEmissionTempo, tk.alice);
 
+      // Verify pending emissions
+
+      // We expect that Charlie's pending emission is at least double of Dave's
+      expect(charliePendingHotkeyEmission > davePendingHotkeyEmission * 2).to.be.true;
+
+      // We expect that Bob's pending emission is approximately equal to Charlie's + Dave's emissions
+      // because of their 50% take
+      expect(bobPendingHotkeyEmission > 0.5 * (charliePendingHotkeyEmission + davePendingHotkeyEmission)).to.be.true;
+      expect(bobPendingHotkeyEmission < 1.5 * (charliePendingHotkeyEmission + davePendingHotkeyEmission)).to.be.true;
     });
   });
 
@@ -718,7 +697,7 @@ describe('Childkeys', () => {
   // +   - Waiting 2 tempos - 1 block fails
   // +   - Waiting 2 tempos fails
   // +   - Waiting 2 tempos + 1 block succeeds
-  // - Childkey take tests
+  // . - Childkey take tests
   // +  - Can set 0 take
   // +  - Can set max take
   // +  - Can't set max+1 take
@@ -726,8 +705,8 @@ describe('Childkeys', () => {
   // +  - max take results in non-zero child reward (and reduces parent reward)
   // +  - For 0 take: emission fully goes to parent's PendingHotkeyEmission (end of epoch)
   // +  - For max take: emission goes to child's and to parent's PendingHotkeyEmission (end of epoch)
-  //   - One parent, two children with unequal proportions, with equal take => PendingHotkeyEmission checks for all three keys
-  //   - Two parents, one common child with unequal proportions => PendingHotkeyEmission checks
+  // +  - One parent, two children with unequal proportions, with equal take => PendingHotkeyEmission checks for all three keys
+  // .  - Two parents, one common child with unequal proportions => PendingHotkeyEmission checks
   // - Nominator rewards (end of hotkey drain tempo)
   //   - Child nominators are rewarded, the sum of rewards is equal to PendingHotkeyEmission
   //   - Parent nominators are rewarded, the sum of rewards is equal to PendingHotkeyEmission

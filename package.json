@@ -4,7 +4,8 @@
   "type": "module",
   "description": "Scripts for external testing of subtensor",
   "scripts": {
-    "test": "mocha --timeout 9999999 --file ./src/setup.js -r ts-node/register ./**/*.test.js"
+    "test": "mocha --timeout 9999999 --file ./src/setup.js -r ts-node/register ./**/*.test.js",
+    "stress": "mocha --timeout 9999999 -r ts-node/register ./**/*.stress.js"
   },
   "author": "",
   "license": "ISC",

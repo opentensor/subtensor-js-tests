@@ -1,4 +1,5 @@
 import { Keyring } from '@polkadot/api';
+import { randomBytes } from 'crypto';
 
 export function getTestKeys() {
     const keyring = new Keyring({ type: 'sr25519' });
@@ -14,4 +15,10 @@ export function getTestKeys() {
         eve: keyring.addFromUri('//Eve'),
         zari: keyring.addFromUri('//Zari')
     };
+}
+
+export function getRandomKeypair() {
+    const keyring = new Keyring({ type: 'sr25519' });
+    const seed = randomBytes(32);
+    return keyring.addFromSeed(seed)
 }

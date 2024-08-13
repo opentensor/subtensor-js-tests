@@ -1,7 +1,7 @@
 import BigNumber from 'bignumber.js';
 
 export const WS_ENDPOINT = "ws://localhost:9946";
-export const CONN_TIMEOUT = 5000;
+export const CONN_TIMEOUT = 10000;
 
 export const netuid = 1;
 export const stake = new BigNumber(10e9);

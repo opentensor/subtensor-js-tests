@@ -18,23 +18,25 @@ function withTimeout(promise, timeoutMs) {
   });
 }
 
-async function createApi() {
+export async function createApi() {
   const wsProvider = new WsProvider(WS_ENDPOINT);
   global.api = new ApiPromise({ provider: wsProvider });
   try {
     await withTimeout(api.isReady, CONN_TIMEOUT);
   } catch (error) {
-    api.disconnect();
+    global.api.disconnect();
     throw Error('Connection timeout')
   }
 
   const cleanup = () => {
-    api.off('disconnected');
-    api.off('error');
+    global.api.off('disconnected');
+    global.api.off('error');
   };
 
-  api.on('disconnected', cleanup);
-  api.on('error', cleanup);
+  global.api.on('disconnected', cleanup);
+  global.api.on('error', cleanup);
+
+  return global.api;
 }
 
 before(async () => {
