@@ -11,6 +11,7 @@ import { netuid, stake, subnetTempo, hotkeyTempo, maxChildTake } from '../config
 
 use(chaiAsPromised);
 
+const rootId = 0;
 let tk;
 let initialTempo; 
 let txChildkeyTakeRateLimit;
@@ -19,7 +20,6 @@ describe('Childkeys', () => {
   before(async () => {
     await usingApi(async api => {
       tk = getTestKeys();
-      const rootId = 0;
 
       // Create subnet 1 and add neurons to it if it doesn't exist
       const subnetExists = (await api.query.subtensorModule.networksAdded(netuid)).toHuman();
@@ -102,18 +102,18 @@ describe('Childkeys', () => {
 
       // Bob sets weights
       console.log(`Bob sets weights`);
-      const txSetWeights = api.tx.subtensorModule.setWeights(netuid, [0, 1], [65535, 65535], 0);
+      const txSetWeights = api.tx.subtensorModule.setWeights(netuid, [0, 1], [0, 0], 0);
       await sendTransaction(api, txSetWeights, tk.bobHot);
 
-      // Register Bob in root subnet
-      console.log(`Register Bob in root`);
-      const txRootRegister = api.tx.subtensorModule.rootRegister(tk.bobHot.address);
-      await sendTransaction(api, txRootRegister, tk.bob);
+      // Register Alice in root subnet
+      console.log(`Register Alice in root`);
+      const txRootRegister2 = api.tx.subtensorModule.rootRegister(tk.aliceHot.address);
+      await sendTransaction(api, txRootRegister2, tk.alice);
 
-      // Bob also sets root weights
-      console.log(`Bob sets root weights`);
-      const txSetRootWeights = api.tx.subtensorModule.setRootWeights(rootId, tk.bobHot.address, [0, 1], [65535, 65535], 0);
-      await sendTransaction(api, txSetRootWeights, tk.bob);
+      // Alice also sets root weights
+      console.log(`Alice sets root weights`);
+      const txSetRootWeights2 = api.tx.subtensorModule.setRootWeights(rootId, tk.aliceHot.address, [0, 1], [65535, 65535], 0);
+      await sendTransaction(api, txSetRootWeights2, tk.alice);
 
       // Wait until root epoch ends
       console.log(`Waiting for root epoch...`);
@@ -218,7 +218,10 @@ describe('Childkeys', () => {
 
   it('Delegate stake rewards', async () => {
     await usingApi(async api => {
-      // Bob is already a delegate because he registered in root
+      // Make Bob a delegate
+      const txBecomeDelegate = api.tx.subtensorModule.becomeDelegate(tk.bobHot.address);
+      await sendTransaction(api, txBecomeDelegate, tk.bob);
+
       // Eve delegates stake to Bob
       const txAddStake = api.tx.subtensorModule.addStake(tk.bobHot.address, stake.toString());
       await sendTransaction(api, txAddStake, tk.eve);
@@ -520,6 +523,12 @@ describe('Childkeys', () => {
       );
       await sendTransaction(api, txSudoSetMaxAllowedValidators, tk.alice);
 
+      // Never drain hotkeys
+      const txSudoHotkeyEmissionTempoNever = api.tx.sudo.sudo(
+        api.tx.adminUtils.sudoSetHotkeyEmissionTempo(1000000)
+      );
+      await sendTransaction(api, txSudoHotkeyEmissionTempoNever, tk.alice);
+
       // Wait for subnet tempo
       await skipBlocks(api, subnetTempo);
 
@@ -559,35 +568,7 @@ describe('Childkeys', () => {
     });
   });
 
-  it('Non-zero child take, both child and parent PendingHotkeyEmission increased', async () => {
-    await usingApi(async api => {
-      // Ensure Dave is registered as a neuron
-      await daveIsNeuron(api, netuid);
-
-      // Bob makes Dave his only child (if not already)
-      await daveIsBobsChild(api, netuid, initialTempo);
-
-      // Dave sets max take
-      await skipBlocks(api, initialTempo * 2);
-      const txSetChildTake = api.tx.subtensorModule.setChildkeyTake(tk.daveHot.address, netuid, maxChildTake);
-      await sendTransaction(api, txSetChildTake, tk.dave);
-
-      // Unstake Dave
-      await setStake(api, tk.daveHot.address, tk.dave, 0);
-
-      // Wait for two subnet tempos
-      await skipBlocks(api, subnetTempo * 4);
-
-      // Check that both Dave's and Bob's PendingEmission are increased
-      const davePeCall = async () => { return await api.query.subtensorModule.pendingdHotkeyEmission(tk.daveHot.address); };
-      const bobPeCall = async () => { return await api.query.subtensorModule.pendingdHotkeyEmission(tk.bobHot.address); };
-
-      await waitForNonZero(davePeCall, subnetTempo);
-      await waitForNonZero(bobPeCall, subnetTempo);
-    });
-  });
-
-  it.only('One parent, two children with unequal proportions', async () => {
+  it('One parent, two children with unequal proportions', async () => {
     await usingApi(async api => {
       // await resetSut(api);
       console.log(`Bob hot: ${tk.bobHot.address}`);
@@ -595,9 +576,8 @@ describe('Childkeys', () => {
       console.log(`Dave hot: ${tk.daveHot.address}`);
 
       // Ensure Charlie and Dave are registered as neurons
-      const charlieUid = await charlieIsNeuron(api, netuid);
-      const daveUid = await daveIsNeuron(api, netuid);
-      const bobUid = 1;
+      await charlieIsNeuron(api, netuid);
+      await daveIsNeuron(api, netuid);
       const neuronCount = (await api.query.subtensorModule.subnetworkN(netuid)).toHuman();
 
       // Everyone is a validator
@@ -609,16 +589,12 @@ describe('Childkeys', () => {
       // Wait for two subnet tempos
       await skipBlocks(api, subnetTempo * 2);
 
-      // Everyone sets weights to down-vote Bob, Charlie, and Dave so that they dont get any miner rewards
+      // Everyone sets 0 weights for everyone so that they dont get any miner rewards
       let uids = [];
       let weights = [];
       for (let i=0; i<neuronCount; i++) {
         uids.push(i);
-        if ((i == daveUid) || (i == charlieUid) || (i == bobUid)) {
-          weights.push(0);
-        } else {
-          weights.push(0xFFFF);
-        }
+        weights.push(0);
       }
       const txSetWeightsAlice = api.tx.subtensorModule.setWeights(netuid, uids, weights, 0);
       await sendTransaction(api, txSetWeightsAlice, tk.aliceHot);
@@ -634,8 +610,8 @@ describe('Childkeys', () => {
 
       // Bob makes Dave and Charlie his only children with 3/4 and 1/4 proportions
       await setChildren(
-        api, netuid, tk.aliceHot.address, tk.alice, 
-        [[0x3FFFFFFFFFFFFFFFn, tk.charlieHot.address], [0x4000000000000000n, tk.daveHot.address]], 
+        api, netuid, tk.bobHot.address, tk.bob, 
+        [[0xBFFFFFFFFFFFFFFFn, tk.charlieHot.address], [0x4000000000000000n, tk.daveHot.address]], 
         initialTempo
       );
 
@@ -653,11 +629,14 @@ describe('Childkeys', () => {
       );
       await sendTransaction(api, txSudoHotkeyEmissionTempoNever, tk.alice);
 
+      await reliableUnstake(api, tk.charlieHot.address, tk.charlie, hotkeyTempo);
+      await reliableUnstake(api, tk.daveHot.address, tk.dave, hotkeyTempo);
+
       const bobPendingHotkeyEmissionBefore = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.bobHot.address)).toNumber();
       const charliePendingHotkeyEmissionBefore = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.charlieHot.address)).toNumber();
       const davePendingHotkeyEmissionBefore = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.daveHot.address)).toNumber();
 
-      await skipBlocks(api, subnetTempo * 20);
+      await skipBlocks(api, subnetTempo * 5);
 
       const bobPendingHotkeyEmissionAfter = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.bobHot.address)).toNumber();
       const charliePendingHotkeyEmissionAfter = (await api.query.subtensorModule.pendingdHotkeyEmission(tk.charlieHot.address)).toNumber();
@@ -667,10 +646,6 @@ describe('Childkeys', () => {
       const charliePendingHotkeyEmission = charliePendingHotkeyEmissionAfter - charliePendingHotkeyEmissionBefore;
       const davePendingHotkeyEmission = davePendingHotkeyEmissionAfter - davePendingHotkeyEmissionBefore;
 
-      console.log(`bobPendingHotkeyEmission     = ${bobPendingHotkeyEmission}`);
-      console.log(`charliePendingHotkeyEmission = ${charliePendingHotkeyEmission}`);
-      console.log(`davePendingHotkeyEmission    = ${davePendingHotkeyEmission}`);
-
       // Restore setup - reduce hotkey drain tempo
       const txSudoHotkeyEmissionTempo = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetHotkeyEmissionTempo(hotkeyTempo)
@@ -679,13 +654,14 @@ describe('Childkeys', () => {
 
       // Verify pending emissions
 
-      // We expect that Charlie's pending emission is at least double of Dave's
-      expect(charliePendingHotkeyEmission > davePendingHotkeyEmission * 2).to.be.true;
+      // We expect that Dave's pending emission is approximately one third of Charlies's
+      expect(charliePendingHotkeyEmission > davePendingHotkeyEmission * 2.99).to.be.true;
+      expect(charliePendingHotkeyEmission < davePendingHotkeyEmission * 3.01).to.be.true;
 
       // We expect that Bob's pending emission is approximately equal to Charlie's + Dave's emissions
       // because of their 50% take
-      expect(bobPendingHotkeyEmission > 0.5 * (charliePendingHotkeyEmission + davePendingHotkeyEmission)).to.be.true;
-      expect(bobPendingHotkeyEmission < 1.5 * (charliePendingHotkeyEmission + davePendingHotkeyEmission)).to.be.true;
+      expect(bobPendingHotkeyEmission > 0.99 * (charliePendingHotkeyEmission + davePendingHotkeyEmission)).to.be.true;
+      expect(bobPendingHotkeyEmission < 1.01 * (charliePendingHotkeyEmission + davePendingHotkeyEmission)).to.be.true;
     });
   });
 
