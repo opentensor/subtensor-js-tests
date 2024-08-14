@@ -13,8 +13,9 @@ use(chaiAsPromised);
 
 const subnetCount = 100;
 const neuronCount = 10;
+const nominatorCount = 100;
 const txPerBlock = 512;
-const initialBalance = 1e18; // Total balance needed for testing
+const initialBalance = 1e19; // Total balance needed for testing
 const coldBalance = 1000e9;   // Balance of each coldkey
 const fees = 1e9;            // Reserve on each coldkey for fees
 const skipSubnets = [3];
@@ -28,6 +29,7 @@ let subnetOwnerColdkeys = [];
 let subnetOwnerHotkeys = [];
 let neuronOwnerColdkeys = [];
 let neuronOwnerHotkeys = [];
+let nominatorColdkeys = [];
 
 describe('Childkeys', () => {
   before(async () => {
@@ -41,20 +43,25 @@ describe('Childkeys', () => {
 
       // Generate subnet owners
       console.log(`Generating coldkeys`);
-      for (let i=0; i<subnetCount; i++) {
+      for (let i=0; i<=subnetCount; i++) {
         subnetOwnerColdkeys.push(getRandomKeypair());
         subnetOwnerHotkeys.push(getRandomKeypair());
       }
 
-      // Generate nominator keys
-      for (let i=0; i<neuronCount * subnetCount; i++) {
+      // Generate subnet owner keys
+      for (let i=0; i<=neuronCount * subnetCount; i++) {
         neuronOwnerColdkeys.push(getRandomKeypair());
         neuronOwnerHotkeys.push(getRandomKeypair());
       }
 
+      // Generate nominator coldkeys
+      for (let i=0; i<nominatorCount; i++) {
+        nominatorColdkeys.push(getRandomKeypair());
+      }
+
       // Fund coldkeys
       console.log(`Funding coldkeys`);
-      const coldkeys = subnetOwnerColdkeys.concat(neuronOwnerColdkeys/*, array3*/);
+      const coldkeys = subnetOwnerColdkeys.concat(neuronOwnerColdkeys, nominatorColdkeys);
 
       // Alice funds herself
       const txSudoSetBalance = api.tx.sudo.sudo(
@@ -87,6 +94,16 @@ describe('Childkeys', () => {
         await sendTransaction(api, transferBatch, tk.alice);
         console.log(`Funded ${batchCount} of ${batchTotal} batches`);
       }
+
+      // Hotkeys become delegates
+      console.log(`Hotkeys become delegates`);
+      let becomeDelegateJobs = [];
+      for (let uid=0; uid<neuronCount; uid++) {
+        const txBecomeDelegate = api.tx.subtensorModule.becomeDelegate(neuronOwnerHotkeys[uid].address);
+        let bdj = async () => { await sendTransaction(api, txBecomeDelegate, neuronOwnerColdkeys[uid]); }
+        becomeDelegateJobs.push(bdj());
+      }
+      await Promise.all(becomeDelegateJobs);
 
       console.log(`Setup done`);
     });
@@ -129,6 +146,7 @@ describe('Childkeys', () => {
       }
     });
 
+    let stakeCount = 0;
     for (let n=1; n<=subnetCount; n++) {
       await usingCreatedApi(async api => {
         const subnetExists = (await api.query.subtensorModule.networksAdded(n)).toHuman();
@@ -151,18 +169,33 @@ describe('Childkeys', () => {
           let addNeuronJobs = [];
           for (let uid=0; uid<neuronCount; uid++) {
             const txRegisterNeuron = api.tx.subtensorModule.burnedRegister(n, neuronOwnerHotkeys[uid].address);
-            addNeuronJobs.push(sendTransaction(api, txRegisterNeuron, neuronOwnerColdkeys[uid]));
+            addNeuronJobs.push(async () => { await sendTransaction(api, txRegisterNeuron, neuronOwnerColdkeys[uid]); });
           }
           await Promise.all(addNeuronJobs);
+
+          for (let uid=0; uid<neuronCount; uid++) {
+            let nominateJobs = [];
+            for (let i=0; i<nominatorCount; i++) {
+              const txAddStake = api.tx.subtensorModule.addStake(neuronOwnerHotkeys[uid].address, stake.toString());
+              nominateJobs.push(async () => { 
+                console.log("Staking");
+                await sendTransaction(api, txAddStake, nominatorColdkeys[i]); 
+                console.log("Staking done");
+                stakeCount++;
+              });
+            }
+            await Promise.all(nominateJobs);
+          }
 
           if ((n+1) % 10 == 0) {
             console.log(`Setup ${n+1} of ${subnetCount} subnets`);
           }
         }
+        api.disconnect();
       });
     }
 
-
+    console.log(`stakeCount = ${stakeCount}`);
 
 
       // // Add stake for alice and bob if it is not added yet
