@@ -11,109 +11,90 @@ import { netuid, stake, subnetTempo, hotkeyTempo, maxChildTake } from '../config
 
 use(chaiAsPromised);
 
-const subnetCount = 100;
-const neuronCount = 10;
-const nominatorCount = 100;
-const txPerBlock = 512;
+const subnetCount = 500;      // Number of subnets to create
+const neuronCount = 100;    // Number of neurons on each subnet
+const nominatorCount = 0; // Number of nominators to stake on each neuron
+const fundTxPerBlock = 4096;
+const stakeTxPerBlock = 5;
 const initialBalance = 1e19; // Total balance needed for testing
 const coldBalance = 1000e9;   // Balance of each coldkey
 const fees = 1e9;            // Reserve on each coldkey for fees
-const skipSubnets = [3];
+const skipSubnets = [0, 3];
 
 let tk;
-let initialTempo; 
-let txChildkeyTakeRateLimit;
-let idleMean;
-let idleStdev;
-let subnetOwnerColdkeys = [];
-let subnetOwnerHotkeys = [];
-let neuronOwnerColdkeys = [];
-let neuronOwnerHotkeys = [];
-let nominatorColdkeys = [];
+
+async function executeJobs(jobs, transactionsPerBlock) {
+  let batchCount = jobs.length / transactionsPerBlock;
+  if (jobs.length % transactionsPerBlock) batchCount++;
+
+  for (let b=0; b<batchCount; b++) {
+    let promises = [];
+    for (let j=0; j<transactionsPerBlock; j++) {
+      promises.push(jobs[b*transactionsPerBlock + j]());
+    }
+    await Promise.all(promises);
+    console.log(`Executed ${(b+1) * transactionsPerBlock} of ${jobs.length} jobs`);
+  }
+}
+
+async function getNetuids(api) {
+  const totalSubnetCount = (await api.query.subtensorModule.totalNetworks()).toNumber();
+  let netuids = [];
+  let netuid = 0;
+  let handledSubnets = 0;
+  while (handledSubnets < totalSubnetCount) {
+    if (!skipSubnets.includes(netuid)) {
+      netuids.push(netuid);
+      handledSubnets++;
+    }
+    netuid++;
+  }
+
+  return netuids;
+}
+
+async function fundKeys(api, coldkeys) {
+  // Alice funds herself
+  const txSudoSetBalance = api.tx.sudo.sudo(
+    api.tx.balances.forceSetBalance(tk.alice.address, (initialBalance + 1000 * fees).toString())
+  );
+  await sendTransaction(api, txSudoSetBalance, tk.alice);
+
+  // Alice funds everyone
+  let index = 0;
+  let batchTotal = parseInt(coldkeys.length / fundTxPerBlock);
+  if (coldkeys.length % fundTxPerBlock) {
+    batchTotal++;
+  }
+  let batchCount = 0;
+  while (index < coldkeys.length) {
+    const batch = [];
+    for (let i=0; i<fundTxPerBlock; i++) {
+      if (index < coldkeys.length) {
+        batch.push(
+          api.tx.balances.transferKeepAlive(coldkeys[index].address, coldBalance.toString())
+        );
+      } else {
+        break;
+      }
+      index++;
+    }
+    batchCount++;
+
+    const transferBatch = api.tx.utility.batchAll(batch);
+    await sendTransaction(api, transferBatch, tk.alice);
+    console.log(`Funded ${batchCount} of ${batchTotal} batches`);
+  }
+}
 
 describe('Childkeys', () => {
   before(async () => {
     await usingCreatedApi(async api => {
-      console.log(`Measuring idle block time`);
       tk = getTestKeys();
-      const { mean, stdev } = await measureBlockTime(api, 10);
-      idleMean = mean;
-      idleStdev = stdev;
-      console.log(`Idle block time = ${idleMean} +/- ${idleStdev} ms`);
 
-      // Generate subnet owners
-      console.log(`Generating coldkeys`);
-      for (let i=0; i<=subnetCount; i++) {
-        subnetOwnerColdkeys.push(getRandomKeypair());
-        subnetOwnerHotkeys.push(getRandomKeypair());
-      }
-
-      // Generate subnet owner keys
-      for (let i=0; i<=neuronCount * subnetCount; i++) {
-        neuronOwnerColdkeys.push(getRandomKeypair());
-        neuronOwnerHotkeys.push(getRandomKeypair());
-      }
-
-      // Generate nominator coldkeys
-      for (let i=0; i<nominatorCount; i++) {
-        nominatorColdkeys.push(getRandomKeypair());
-      }
-
-      // Fund coldkeys
-      console.log(`Funding coldkeys`);
-      const coldkeys = subnetOwnerColdkeys.concat(neuronOwnerColdkeys, nominatorColdkeys);
-
-      // Alice funds herself
-      const txSudoSetBalance = api.tx.sudo.sudo(
-        api.tx.balances.forceSetBalance(tk.alice.address, (initialBalance + 1000 * fees).toString())
-      );
-      await sendTransaction(api, txSudoSetBalance, tk.alice);
-
-      // Alice funds everyone
-      let index = 0;
-      let batchTotal = parseInt(coldkeys.length / txPerBlock);
-      if (coldkeys.length % txPerBlock) {
-        batchTotal++;
-      }
-      let batchCount = 0;
-      while (index < coldkeys.length) {
-        const batch = [];
-        for (let i=0; i<txPerBlock; i++) {
-          if (index < coldkeys.length) {
-            batch.push(
-              api.tx.balances.transferKeepAlive(coldkeys[index].address, coldBalance.toString())
-            );
-          } else {
-            break;
-          }
-          index++;
-        }
-        batchCount++;
-
-        const transferBatch = api.tx.utility.batchAll(batch);
-        await sendTransaction(api, transferBatch, tk.alice);
-        console.log(`Funded ${batchCount} of ${batchTotal} batches`);
-      }
-
-      // Hotkeys become delegates
-      console.log(`Hotkeys become delegates`);
-      let becomeDelegateJobs = [];
-      for (let uid=0; uid<neuronCount; uid++) {
-        const txBecomeDelegate = api.tx.subtensorModule.becomeDelegate(neuronOwnerHotkeys[uid].address);
-        let bdj = async () => { await sendTransaction(api, txBecomeDelegate, neuronOwnerColdkeys[uid]); }
-        becomeDelegateJobs.push(bdj());
-      }
-      await Promise.all(becomeDelegateJobs);
-
-      console.log(`Setup done`);
-    });
-  });
-
-  it('Stressed block time', async () => {
-    await usingCreatedApi(async api => {
-      const rootId = 0;
 
       // Set minimal lock reduction interval and lock cost
+      console.log(`Set minimal lock reduction interval and lock cost`);
       const txSudoSetLockCost = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetNetworkMinLockCost(0)
       );
@@ -124,188 +105,180 @@ describe('Childkeys', () => {
       await sendTransaction(api, txSudoSetReductionInterval, tk.alice);
 
       // Allow number of subnets needed
+      console.log(`Allow number of subnets needed`);
       const txSudoSetSubnetLimit = api.tx.sudo.sudo(
-        api.tx.adminUtils.sudoSetSubnetLimit(subnetCount + 1) // need + 1 because we start with pre-existing subnet 3
+        api.tx.adminUtils.sudoSetSubnetLimit(65535)
       );
       await sendTransaction(api, txSudoSetSubnetLimit, tk.alice);
 
       // Allow to register neurons frequently
       console.log(`Allow to register neurons frequently`);
       const txSudoSetRegistrationRateLimit = api.tx.sudo.sudo(
-        api.tx.adminUtils.sudoSetTargetRegistrationsPerInterval(netuid, neuronCount * subnetCount)
+        api.tx.adminUtils.sudoSetTargetRegistrationsPerInterval(netuid, 65535)
       );
       await sendTransaction(api, txSudoSetRegistrationRateLimit, tk.alice);
 
-      // Allow number of neurons needed
-
-
-      // Create subnets and add neurons
-      const subnetExists = (await api.query.subtensorModule.networksAdded(netuid)).toHuman();
-      if (subnetExists) {
-        throw Error("Restart the network");
+      // Set shorter hotkey tempo (if extrinsic is available)
+      try {
+        console.log(`Set shorter hotkey emission tempo`);
+        const txSudoSetHotkeyTempo = api.tx.sudo.sudo(
+          api.tx.adminUtils.sudoSetHotkeyEmissionTempo(hotkeyTempo)
+        );
+        await sendTransaction(api, txSudoSetHotkeyTempo, tk.alice);
+      } catch (e) {
+        console.log(`Failed. Extrinsic is unavailable.`, e);
       }
-    });
 
-    let stakeCount = 0;
-    for (let n=1; n<=subnetCount; n++) {
-      await usingCreatedApi(async api => {
-        const subnetExists = (await api.query.subtensorModule.networksAdded(n)).toHuman();
-        if (!subnetExists) {
-          const txRegisterSubnet = api.tx.subtensorModule.registerNetwork();
-          await sendTransaction(api, txRegisterSubnet, subnetOwnerColdkeys[n]);
-
-          // Allow registrations per block
-          const txSudoSetMaxRegistrations1 = api.tx.sudo.sudo(
-            api.tx.adminUtils.sudoSetMaxRegistrationsPerBlock(n, neuronCount+1)
-          );
-          await sendTransaction(api, txSudoSetMaxRegistrations1, tk.alice);
-
-          // Allow registrations per interval
-          const txSudoSetMaxRegistrations2 = api.tx.sudo.sudo(
-            api.tx.adminUtils.sudoSetTargetRegistrationsPerInterval(n, neuronCount+1)
-          );
-          await sendTransaction(api, txSudoSetMaxRegistrations2, tk.alice);
-
-          let addNeuronJobs = [];
-          for (let uid=0; uid<neuronCount; uid++) {
-            const txRegisterNeuron = api.tx.subtensorModule.burnedRegister(n, neuronOwnerHotkeys[uid].address);
-            addNeuronJobs.push(async () => { await sendTransaction(api, txRegisterNeuron, neuronOwnerColdkeys[uid]); });
-          }
-          await Promise.all(addNeuronJobs);
-
-          for (let uid=0; uid<neuronCount; uid++) {
-            let nominateJobs = [];
-            for (let i=0; i<nominatorCount; i++) {
-              const txAddStake = api.tx.subtensorModule.addStake(neuronOwnerHotkeys[uid].address, stake.toString());
-              nominateJobs.push(async () => { 
-                console.log("Staking");
-                await sendTransaction(api, txAddStake, nominatorColdkeys[i]); 
-                console.log("Staking done");
-                stakeCount++;
-              });
-            }
-            await Promise.all(nominateJobs);
-          }
-
-          if ((n+1) % 10 == 0) {
-            console.log(`Setup ${n+1} of ${subnetCount} subnets`);
-          }
-        }
-        api.disconnect();
-      });
-    }
-
-    console.log(`stakeCount = ${stakeCount}`);
-
-
-      // // Add stake for alice and bob if it is not added yet
-      // await setupStartingStake(api);
-
-      // // Allow setting weights frequently
-      // console.log(`Allow setting weights frequently`);
-      // const txSudoSetWeightsRateLimit = api.tx.sudo.sudo(
-      //   api.tx.adminUtils.sudoSetWeightsSetRateLimit(netuid, 0)
-      // );
-      // await sendTransaction(api, txSudoSetWeightsRateLimit, tk.alice);
-      // const txSudoSetWeightsRateLimitRoot = api.tx.sudo.sudo(
-      //   api.tx.adminUtils.sudoSetWeightsSetRateLimit(rootId, 0)
-      // );
-      // await sendTransaction(api, txSudoSetWeightsRateLimitRoot, tk.alice);
-
-      // // Allow to stake/unstake frequently
-      // console.log(`Allow to stake frequently`);
-      // const txSudoSetStakingRateLimit = api.tx.sudo.sudo(
-      //   api.tx.adminUtils.sudoSetTargetStakesPerInterval(1000)
-      // );
-      // await sendTransaction(api, txSudoSetStakingRateLimit, tk.alice);
-
-
-      // // Allow to stake/unstake frequently
-      // console.log(`Disable tx rate limit`);
-      // const txSudoSetTxRateLimit = api.tx.sudo.sudo(
-      //   api.tx.adminUtils.sudoSetTxRateLimit(0)
-      // );
-      // await sendTransaction(api, txSudoSetTxRateLimit, tk.alice);
-
-      // // Reduce subnet tempo
-      // console.log(`Reduce subnet tempo`);
-      // const txSudoSetTempo = api.tx.sudo.sudo(
-      //   api.tx.adminUtils.sudoSetTempo(netuid, subnetTempo)
-      // );
-      // await sendTransaction(api, txSudoSetTempo, tk.alice);
-
-      // // Reduce root tempo
-      // console.log(`Reduce root tempo`);
-      // const txSudoSetTempoRoot = api.tx.sudo.sudo(
-      //   api.tx.adminUtils.sudoSetTempo(rootId, subnetTempo)
-      // );
-      // await sendTransaction(api, txSudoSetTempoRoot, tk.alice);
-
-      // // Reduce hotkey drain tempo
-      // console.log(`Reduce hotkey tempo`);
-      // const txSudoHotkeyEmissionTempo = api.tx.sudo.sudo(
-      //   api.tx.adminUtils.sudoSetHotkeyEmissionTempo(hotkeyTempo)
-      // );
-      // await sendTransaction(api, txSudoHotkeyEmissionTempo, tk.alice);
-
-      // // Wait for the end of subnet tempo so that Alice and Bob get validator permits
-      // // Only do it if Alice doesn't have validator permit
-      // const permits = (await api.query.subtensorModule.validatorPermit(netuid)).toHuman();
-      // if (!permits[0]) {
-      //   console.log(`Waiting for permits...`);
-      //   await skipBlocks(api, subnetTempo);
-      // }
-
-      // // Bob sets weights
-      // console.log(`Bob sets weights`);
-      // const txSetWeights = api.tx.subtensorModule.setWeights(netuid, [0, 1], [65535, 65535], 0);
-      // await sendTransaction(api, txSetWeights, tk.bobHot);
-
-      // // Register Bob in root subnet
-      // console.log(`Register Bob in root`);
-      // const txRootRegister = api.tx.subtensorModule.rootRegister(tk.bobHot.address);
-      // await sendTransaction(api, txRootRegister, tk.bob);
-
-      // // Bob also sets root weights
-      // console.log(`Bob sets root weights`);
-      // const txSetRootWeights = api.tx.subtensorModule.setRootWeights(rootId, tk.bobHot.address, [0, 1], [65535, 65535], 0);
-      // await sendTransaction(api, txSetRootWeights, tk.bob);
-
-      // // Wait until root epoch ends
-      // console.log(`Waiting for root epoch...`);
-      // const rootTempo = (await api.query.subtensorModule.tempo(0)).toNumber();
-      // let endRootEpoch = false;
-      // while (!endRootEpoch) {
-      //   const block = (await api.query.system.number()).toNumber();
-      //   endRootEpoch = (block % rootTempo) == 0;
-      // }
-
-      // // Read default tempo and child take rate limit
-      // initialTempo = api.consts.subtensorModule.initialTempo.toNumber();
-      // txChildkeyTakeRateLimit = (await api.query.subtensorModule.txChildkeyTakeRateLimit()).toNumber();
-
-      // // Tests expect that childkey take rate limit and initial tempo are short
-      // if ((initialTempo >= 20) || (txChildkeyTakeRateLimit > initialTempo)) {
-      //   console.log("Tests expect local node running with fast-blocks feature");
-      // }
-      // expect(initialTempo < 20).to.be.true;
-      // expect(txChildkeyTakeRateLimit <= initialTempo).to.be.true;
-
-      // // Set max childkey take
-      // console.log(`Set max childkey take`);
-      // const txSudoSetMaxChildkeyTake = api.tx.sudo.sudo(
-      //   api.tx.subtensorModule.sudoSetMaxChildkeyTake(maxChildTake)
-      // );
-      // await sendTransaction(api, txSudoSetMaxChildkeyTake, tk.alice);
-
-    await usingCreatedApi(async api => {
-      console.log(`Measure block time`);
-      const { mean, stdev } = await measureBlockTime(api, 100);
-
-      console.log(`Idle block time = ${idleMean} +/- ${idleStdev} ms`);
-      console.log(`Block time      = ${mean} +/- ${stdev} ms`);
+      console.log(`Setup done`);
     });
   });
 
+  it('Add subnets', async () => {
+    // Generate subnet owners
+    let subnetOwnerColdkeys = [];
+    console.log(`Generating coldkeys`);
+    for (let i=0; i<=subnetCount; i++) {
+      subnetOwnerColdkeys.push(getRandomKeypair());
+    }
+
+    await usingCreatedApi(async api => {
+      // Read current number of subnets and generate netuids
+      let netuids = [];
+      let netuid = 0;
+      let handledSubnets = 0;
+      while (handledSubnets < subnetCount) {
+        if (!skipSubnets.includes(netuid)) {
+          netuids.push(netuid);
+          handledSubnets++;
+        }
+        netuid++;
+      }
+
+      // Fund coldkeys
+      await fundKeys(api, subnetOwnerColdkeys);
+
+      // Create all subnets
+      for (let n=0; n<subnetCount; n++) {
+        let netuid = netuids[n];
+
+        const txRegisterSubnet = api.tx.subtensorModule.registerNetwork();
+        await sendTransaction(api, txRegisterSubnet, subnetOwnerColdkeys[n]);
+
+        let batch = [];
+
+        // Allow registrations per block
+        const txSudoSetMaxRegistrations1 = api.tx.sudo.sudo(
+          api.tx.adminUtils.sudoSetMaxRegistrationsPerBlock(netuid, neuronCount+1)
+        );
+        batch.push(txSudoSetMaxRegistrations1);
+
+        // Allow registrations per interval
+        const txSudoSetMaxRegistrations2 = api.tx.sudo.sudo(
+          api.tx.adminUtils.sudoSetTargetRegistrationsPerInterval(netuid, neuronCount+1)
+        );
+        batch.push(txSudoSetMaxRegistrations2);
+
+        // Set shorter subnet tempo
+        const txSudoSetTempo = api.tx.sudo.sudo(
+          api.tx.adminUtils.sudoSetTempo(netuid, subnetTempo)
+        );
+        batch.push(txSudoSetTempo);
+
+        const txBatchAll = api.tx.utility.batchAll(batch);
+        await sendTransaction(api, txBatchAll, tk.alice);
+
+        console.log(`Created ${n+1} of ${subnetCount} subnets`);
+      }
+    });
+  });
+
+  it.only('Add neurons', async () => {
+    let netuids;
+    await usingCreatedApi(async api => {
+      // Get the list of subnets
+      netuids = await getNetuids(api);
+    });
+
+    for (let i=509; i<netuids.length; i++) {
+      await usingCreatedApi(async api => {
+        let netuid = netuids[i];
+
+        // Generate neuron owner keys
+        let neuronOwnerColdkeys = [];
+        let neuronOwnerHotkeys = [];
+        for (let i=0; i<neuronCount; i++) {
+          neuronOwnerColdkeys.push(getRandomKeypair());
+          neuronOwnerHotkeys.push(getRandomKeypair());
+        }
+
+        // Fund neuron owners
+        await fundKeys(api, neuronOwnerColdkeys);
+
+        // Run registration jobs
+        let addNeuronJobs = [];
+        for (let uid=0; uid<neuronCount; uid++) {
+          const txRegisterNeuron = api.tx.subtensorModule.burnedRegister(netuid, neuronOwnerHotkeys[uid].address);
+          addNeuronJobs.push(sendTransaction(api, txRegisterNeuron, neuronOwnerColdkeys[uid]));
+        }
+        await Promise.all(addNeuronJobs);
+
+        // Hotkeys become delegates
+        let becomeDelegateJobs = [];
+        for (let uid=0; uid<neuronCount; uid++) {
+          const txBecomeDelegate = api.tx.subtensorModule.becomeDelegate(neuronOwnerHotkeys[uid].address);
+          becomeDelegateJobs.push(sendTransaction(api, txBecomeDelegate, neuronOwnerColdkeys[uid]));
+        }
+        await Promise.all(becomeDelegateJobs);
+
+        console.log(`Setup ${i+1} of ${netuids.length} subnets`);
+      });
+    }
+  });
+
+  it.skip('Nominate to everyone', async () => {
+    await usingCreatedApi(async api => {
+      // Get the list of subnets
+      let netuids = await getNetuids(api);
+
+      // Read the full list of hotkeys for all subnets
+      const neuronHotkeys = [];
+      for (let n=0; n<netuids.length; n++) {
+        const netuid = netuids[n];
+
+        // Get the list of hotkeys - owners of neurons
+        const hotkeys = (await api.query.subtensorModule.keys.entries(netuid));
+        for (let i=0; i<hotkeys.length; i++) {
+          const hotkey = hotkeys[i];
+          neuronHotkeys.push(hotkey.toString());
+        }
+      }
+
+      // Generate and fund nominator coldkeys
+      let nominatorColdkeys = [];
+      for (let i=0; i<nominatorCount; i++) {
+        nominatorColdkeys.push(getRandomKeypair());
+      }
+      await fundKeys(nominatorColdkeys);
+
+      // Populate stake jobs
+      let stakeJobs = [];
+      for (let i=0; i<nominatorCount; i++) {
+        let batch = [];
+        for (let j=0; j<neuronHotkeys.length; j++) {
+          batch.push(
+            api.tx.subtensorModule.addStake(neuronHotkeys[j], stake.toString())
+          );
+        }
+        const stakeBatch = api.tx.utility.batchAll(batch);
+        const sj = async () => {
+          await sendTransaction(api, stakeBatch, nominatorColdkeys[i]);
+        };
+        stakeJobs.push(sj);
+      }
+
+      // Execute stake jobs in batches
+      await executeJobs(stakeJobs, stakeTxPerBlock);
+    });
+  });
 
 });
