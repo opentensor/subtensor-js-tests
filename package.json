@@ -4,8 +4,8 @@
   "type": "module",
   "description": "Scripts for external testing of subtensor",
   "scripts": {
-    "test": "mocha --timeout 9999999 --file ./src/setup.js -r ts-node/register ./**/*.test.js",
-    "stress": "mocha --timeout 9999999 -r ts-node/register ./**/*.stress.js"
+    "test": "mocha --timeout 9999999 --file src/setup.js -r ts-node/register 'src/**/*.test.js'",
+    "stress": "mocha --timeout 9999999 -r ts-node/register 'src/**/*.stress.js'"
   },
   "author": "",
   "license": "ISC",
@@ -17,6 +17,7 @@
     "bignumber.js": "^9.1.2",
     "chai": "^5.1.1",
     "chai-as-promised": "^8.0.0",
+    "ethers": "^6.13.3",
     "mocha": "^10.7.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.4"

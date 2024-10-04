@@ -1,7 +1,8 @@
-import { getTestKeys } from '../util/known-keys.js';
+import { getTestKeys } from './known-keys.js';
 import { sendTransaction, skipBlocks } from './comm.js';
-import { waitForStakeIncrease } from '../util/waiters.js';
-import { netuid, stake, subnetTempo, hotkeyTempo, maxChildTake } from '../config.js';
+import { waitForStakeIncrease } from './waiters.js';
+import { netuid, stake, subnetTempo, hotkeyTempo, maxChildTake } from '../../config.js';
+import { ApiPromise } from '@polkadot/api';
 
 export async function setStake(api, hotkey, signer, desiredAmount) {
   const currentStake = (await api.query.subtensorModule.stake(hotkey, signer.address)).toNumber();
@@ -106,4 +107,44 @@ export async function resetSut(api) {
   let initialTempo = api.consts.subtensorModule.initialTempo.toNumber();
   await setChildren(api, netuid, tk.aliceHot.address, tk.alice, [], initialTempo);
   await setChildren(api, netuid, tk.bobHot.address, tk.bob, [], initialTempo);
+}
+
+/**
+ * Asynchronously retrieves the free balance of a specified account address on a Substrate-based blockchain.
+ *
+ * @async
+ * @function getSubstrateFreeBalance
+ * @param {ApiPromise} api - The instance of Substrate api.
+ * @param {string} address - The Substrate account address whose free balance will be retrieved.
+ * @returns {Promise<BigNumber>} A promise that resolves with the free balance of the account as a BigNumber.
+ * @throws {Error} Throws an error if the connection fails or the account address is invalid.
+ * @example
+ * getSubstrateFreeBalance('5FHneW46xGXgs5mUiveU4sbTyGBrh6pFJC9vvPe7b4iZM4yW')
+ *   .then(balance => console.log(`Free Balance: ${balance} units`))
+ *   .catch(err => console.error('Error fetching balance:', err));
+ */
+export async function getTaoBalance(api, address) {
+  const { data: { free } } = await api.query.system.account(address);
+  return free;
+}
+
+/**
+ * Asynchronously retrieves the existential deposit required to keep an account alive on a Substrate-based blockchain.
+ *
+ * @async
+ * @function getExistentialDeposit
+ * @param {ApiPromise} api - The instance of Substrate api.
+ * @returns {Promise<BigInt>} A promise that resolves with the existential deposit as a BigInt.
+ * @throws {Error} Throws an error if unable to connect to the node or fetch the existential deposit.
+ * @example
+ * getExistentialDeposit()
+ *   .then(deposit => console.log(`Existential Deposit: ${deposit} units`))
+ *   .catch(err => console.error('Error fetching existential deposit:', err));
+ */
+export async function getExistentialDeposit(api) {
+  // Fetch the existential deposit from the chain's constants
+  const ed = api.consts.balances.existentialDeposit;
+
+  // Return the deposit as BigInt (Polkadot.js uses its own BN.js library which is similar to BigInt)
+  return ed.toBigInt();
 }

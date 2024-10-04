@@ -1,4 +1,4 @@
-import { usingApi } from '../util/comm.js';
+import { usingApi } from './util/comm.js';
 import { expect } from 'chai';
 
 describe('Connection', () => {

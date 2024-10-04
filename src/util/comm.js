@@ -1,4 +1,6 @@
-import { createApi } from '../src/setup.js';
+import { createApi } from '../setup.js';
+import { RPC_ENDPOINT } from '../../config.js';
+import { ethers } from 'ethers';
 import { expect, use } from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 use(chaiAsPromised);
@@ -141,4 +143,17 @@ export async function measureBlockTime(api, blockCount) {
       reject(error);
     }
   });
+}
+
+export async function usingEthApi(action) {
+  try {
+    const provider = new ethers.JsonRpcProvider(RPC_ENDPOINT);
+    await action(provider);
+  } catch (e) {
+    if (typeof e == String) {
+      throw Error(e);
+    } else {
+      throw e;
+    }
+  }
 }

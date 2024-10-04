@@ -13,7 +13,7 @@ use(chaiAsPromised);
 
 const subnetCount = 500;      // Number of subnets to create
 const neuronCount = 100;    // Number of neurons on each subnet
-const nominatorCount = 0; // Number of nominators to stake on each neuron
+const nominatorCount = 10; // Number of nominators to stake on each neuron
 const fundTxPerBlock = 4096;
 const stakeTxPerBlock = 5;
 const initialBalance = 1e19; // Total balance needed for testing
@@ -41,11 +41,9 @@ async function getNetuids(api) {
   const totalSubnetCount = (await api.query.subtensorModule.totalNetworks()).toNumber();
   let netuids = [];
   let netuid = 0;
-  let handledSubnets = 0;
-  while (handledSubnets < totalSubnetCount) {
+  while (netuid < totalSubnetCount) {
     if (!skipSubnets.includes(netuid)) {
       netuids.push(netuid);
-      handledSubnets++;
     }
     netuid++;
   }
@@ -192,50 +190,92 @@ describe('Childkeys', () => {
     });
   });
 
-  it.only('Add neurons', async () => {
+  it('Add neurons', async () => {
     let netuids;
+    let startIdx = 0;
     await usingCreatedApi(async api => {
       // Get the list of subnets
       netuids = await getNetuids(api);
+
+      // Search for the first subnet without neurons
+      startIdx = netuids.length;
+      for (let i=0; i<netuids.length; i++) {
+        const n = (await api.query.subtensorModule.subnetworkN(netuids[i])).toNumber();
+        if (n < 100) {
+          startIdx = i;
+          break;
+        }
+      }
     });
 
-    for (let i=509; i<netuids.length; i++) {
+    // How many time to use the api for setting up before it is recreated
+    const apiRecreateIterations = 5;
+    let i=startIdx;
+
+    while (i<netuids.length) {
       await usingCreatedApi(async api => {
-        let netuid = netuids[i];
+        for (let j=0; j<apiRecreateIterations; j++) {
+          if (i+j < netuids.length) {
+            let netuid = netuids[i+j];
 
-        // Generate neuron owner keys
-        let neuronOwnerColdkeys = [];
-        let neuronOwnerHotkeys = [];
-        for (let i=0; i<neuronCount; i++) {
-          neuronOwnerColdkeys.push(getRandomKeypair());
-          neuronOwnerHotkeys.push(getRandomKeypair());
+            // Generate neuron owner keys
+            let neuronOwnerColdkeys = [];
+            let neuronOwnerHotkeys = [];
+            for (let k=0; k<neuronCount; k++) {
+              neuronOwnerColdkeys.push(getRandomKeypair());
+              neuronOwnerHotkeys.push(getRandomKeypair());
+            }
+    
+            // Fund neuron owners
+            await fundKeys(api, neuronOwnerColdkeys);
+    
+            // Run registration jobs
+            let addNeuronJobs = [];
+            for (let uid=0; uid<neuronCount; uid++) {
+              const txRegisterNeuron = api.tx.subtensorModule.burnedRegister(netuid, neuronOwnerHotkeys[uid].address);
+              addNeuronJobs.push(sendTransaction(api, txRegisterNeuron, neuronOwnerColdkeys[uid]));
+            }
+            await Promise.all(addNeuronJobs);
+    
+            // Hotkeys become delegates
+            let becomeDelegateJobs = [];
+            for (let uid=0; uid<neuronCount; uid++) {
+              const txBecomeDelegate = api.tx.subtensorModule.becomeDelegate(neuronOwnerHotkeys[uid].address);
+              becomeDelegateJobs.push(sendTransaction(api, txBecomeDelegate, neuronOwnerColdkeys[uid]));
+            }
+            await Promise.all(becomeDelegateJobs);
+    
+            console.log(`Setup ${i+j+1} of ${netuids.length} subnets`);
+          }
         }
-
-        // Fund neuron owners
-        await fundKeys(api, neuronOwnerColdkeys);
-
-        // Run registration jobs
-        let addNeuronJobs = [];
-        for (let uid=0; uid<neuronCount; uid++) {
-          const txRegisterNeuron = api.tx.subtensorModule.burnedRegister(netuid, neuronOwnerHotkeys[uid].address);
-          addNeuronJobs.push(sendTransaction(api, txRegisterNeuron, neuronOwnerColdkeys[uid]));
-        }
-        await Promise.all(addNeuronJobs);
-
-        // Hotkeys become delegates
-        let becomeDelegateJobs = [];
-        for (let uid=0; uid<neuronCount; uid++) {
-          const txBecomeDelegate = api.tx.subtensorModule.becomeDelegate(neuronOwnerHotkeys[uid].address);
-          becomeDelegateJobs.push(sendTransaction(api, txBecomeDelegate, neuronOwnerColdkeys[uid]));
-        }
-        await Promise.all(becomeDelegateJobs);
-
-        console.log(`Setup ${i+1} of ${netuids.length} subnets`);
+        i += apiRecreateIterations;
       });
     }
   });
 
-  it.skip('Nominate to everyone', async () => {
+  it('Setup tempos', async () => {
+    let netuids;
+    const subnetTempo = 360;
+    await usingCreatedApi(async api => {
+      // Get the list of subnets
+      netuids = await getNetuids(api);
+
+      let batch = [];
+      for (let n=0; n<netuids.length; n++) {
+        let netuid = netuids[n];
+        // Set subnet tempo
+        const txSudoSetTempo = api.tx.sudo.sudo(
+          api.tx.adminUtils.sudoSetTempo(netuid, subnetTempo)
+        );
+        batch.push(txSudoSetTempo);
+      }
+
+      const txBatchAll = api.tx.utility.batchAll(batch);
+      await sendTransaction(api, txBatchAll, tk.alice);
+    });
+  });
+
+  it.only('Nominate to everyone', async () => {
     await usingCreatedApi(async api => {
       // Get the list of subnets
       let netuids = await getNetuids(api);
@@ -248,17 +288,23 @@ describe('Childkeys', () => {
         // Get the list of hotkeys - owners of neurons
         const hotkeys = (await api.query.subtensorModule.keys.entries(netuid));
         for (let i=0; i<hotkeys.length; i++) {
-          const hotkey = hotkeys[i];
-          neuronHotkeys.push(hotkey.toString());
+          const hotkey = hotkeys[i][1].toString();
+
+          const currentStake = (await api.query.subtensorModule.totalHotkeyStake(hotkey)).toNumber();
+          if (currentStake < stake * nominatorCount) {
+            neuronHotkeys.push(hotkey);
+          }
         }
       }
+      console.log(`Discovered ${neuronHotkeys.length} hotkeys to stake to`);
 
       // Generate and fund nominator coldkeys
       let nominatorColdkeys = [];
       for (let i=0; i<nominatorCount; i++) {
         nominatorColdkeys.push(getRandomKeypair());
       }
-      await fundKeys(nominatorColdkeys);
+      await fundKeys(api, nominatorColdkeys);
+      console.log(`Funded all nominators`);
 
       // Populate stake jobs
       let stakeJobs = [];
@@ -277,6 +323,7 @@ describe('Childkeys', () => {
       }
 
       // Execute stake jobs in batches
+      console.log(`Executing stake jobs`);
       await executeJobs(stakeJobs, stakeTxPerBlock);
     });
   });
