@@ -100,6 +100,8 @@ describe('Balance transfers between substrate and EVM', () => {
   });
   
   it('Transfer from EVM to substrate using precompile', async () => {
+    // Generally, copy+paste from here:
+    // https://github.com/gztensor/evm-demo/blob/main/withdraw.js
   });
 
   it('Transfer from EVM to substrate using evm::withdraw', async () => {
