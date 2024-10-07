@@ -116,7 +116,51 @@ describe('Balance transfers between substrate and EVM', () => {
     // Verify that received value is accurate on the final destination address.
   });
 
+  it('Transfer full balance', async () => {
+    // See the test "Transfer between two EVM accounts" for how to estaimate tx fee
+  });
+
   it('Transfer more than owned balance should fail', async () => {
+    await usingEthApi(async provider => {
+      // Generate a random H160 address
+      const recipient = generateRandomAddress();
+      const amount = convertEtherToWei(1.0);
+
+      // Send TAO
+      const tx = {
+        to: recipient.address,
+        value: amount.toString()
+      };
+
+      // Send the transaction
+      await sendEthTransaction(provider, fundedEthWallet, tx);
+
+      // Generate another random H160 address
+      const recipient2 = generateRandomAddress().address;
+
+      // Send TAO over balance limit
+      const tx2 = {
+        to: recipient2,
+        value: amount.plus(1).toString()
+      };
+
+      // Send the transaction
+      await expect(sendEthTransaction(provider, recipient, tx2)).to.be.rejectedWith("insufficient funds for intrinsic transaction cost");
+
+      // Check balances
+      const ethBalanceAfter1 = await getEthereumBalance(provider, recipient.address);
+      const ethBalanceAfter2 = await getEthereumBalance(provider, recipient2);
+      const ed_eth = convertEtherToWei(convertRaoToTao(ed))
+
+      expect(ethBalanceAfter1
+        .plus(ed_eth)
+        .toString()
+      ).to.be.equal(amount.toString());
+
+      expect(ethBalanceAfter2
+        .toString()
+      ).to.be.equal("0");
+    });
   });
 
   it('Transfer more than u64::max in substrate equivalent should receive error response', async () => {
