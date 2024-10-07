@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import BigNumber from 'bignumber.js';
 
 /**
  * Asynchronously retrieves the balance of a specified Ethereum address.
@@ -14,6 +15,24 @@ import { ethers } from "ethers";
  *   .catch(err => console.error("Error fetching balance:", err));
  */
 export async function getEthereumBalance(provider, address) {
-    const balance = await provider.getBalance(address); // Fetch the balance
-    return balance; // The balance is already returned as a BigNumber by ethers.js
+  const balance = await provider.getBalance(address); // Fetch the balance
+  return new BigNumber(balance);
+}
+
+export async function sendEthTransaction(provider, sender, tx) {
+  // Initialize signer
+  const wallet = new ethers.Wallet(sender.privateKey, provider);
+
+  // Send the transaction
+  const txResponse = await wallet.sendTransaction(tx);
+
+  // Wait for the transaction to be mined
+  await txResponse.wait();
+}
+
+export async function estimateTransactionCost(provider, tx) {
+  const feeData = await provider.getFeeData();
+  const estimatedGas = new BigNumber(await provider.estimateGas(tx));
+  const gasPrice = feeData.gasPrice || feeData.maxFeePerGas;
+  return estimatedGas.multipliedBy(gasPrice);
 }
