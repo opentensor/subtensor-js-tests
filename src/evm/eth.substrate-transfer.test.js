@@ -2,7 +2,7 @@ import { usingApi, usingEthApi, sendTransaction } from '../util/comm.js';
 import { getTestKeys } from '../util/known-keys.js';
 import { convertEtherToWei, convertWeiToEther, convertTaoToRao, convertRaoToTao } from '../util/balance-math.js';
 import { convertH160ToSS58, generateRandomAddress } from '../util/address.js';
-import { getEthereumBalance, estimateTransactionCost, sendEthTransaction } from '../util/eth-helpers.js';
+import { getEthereumBalance, estimateTransactionCost, sendEthTransaction, ss58ToH160 } from '../util/eth-helpers.js';
 import { getExistentialDeposit, getTaoBalance } from '../util/helpers.js';
 import { decodeAddress } from '@polkadot/util-crypto';
 import { ethers } from "ethers";
@@ -161,6 +161,45 @@ describe('Balance transfers between substrate and EVM', () => {
   });
 
   it('Transfer from EVM to substrate using evm::withdraw', async () => {
+    const amount = 0.5;
+    const amountStr = convertEtherToWei(amount).toString();
+
+    // Recipient address on substrate side
+    const alice = tk.alice;
+    const aliceEthereumAddress = ss58ToH160(alice.address);
+
+    // Transfer to Alice's ethereum mirror to prepare for evm::withdraw
+    await usingEthApi(async provider => {
+      const tx = {
+        to: aliceEthereumAddress,
+        value: amountStr
+      };
+      await sendEthTransaction(provider, fundedEthWallet, tx);
+    });
+
+    await usingApi(async api => {
+      // Check Alice's balance before withdraw transaction
+      let aliceBalanceBefore = await getTaoBalance(api, alice.address);
+
+      // Execute evm::withdraw to withdraw from Alice mirror account to Alice
+      let amountSub = convertTaoToRao(amount).toString();
+      const withdraw = api.tx.evm.withdraw(aliceEthereumAddress, amountSub);
+
+      // Estimate the transaction fee
+      const paymentInfo = await withdraw.paymentInfo(tk.alice.address);
+
+      await sendTransaction(api, withdraw, tk.alice);
+
+      // Check Alice's balance after withdraw transaction
+      let aliceBalanceAfter = new BigNumber(await getTaoBalance(api, alice.address));
+
+      // Balance difference should be equal to transferred amount considering tx fee
+      expect(aliceBalanceAfter
+        .minus(aliceBalanceBefore)
+        .plus(paymentInfo.partialFee)
+        .toString()
+      ).to.be.equal(amountSub.toString());
+    });
   });
 
   it('Transfer value using evm::call', async () => {

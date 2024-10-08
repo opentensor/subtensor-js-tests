@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { decodeAddress } from '@polkadot/util-crypto';
 import BigNumber from 'bignumber.js';
 
 /**
@@ -35,4 +36,27 @@ export async function estimateTransactionCost(provider, tx) {
   const estimatedGas = new BigNumber(await provider.estimateGas(tx));
   const gasPrice = feeData.gasPrice || feeData.maxFeePerGas;
   return estimatedGas.multipliedBy(gasPrice);
+}
+
+/**
+ * Converts an SS58 formatted Substrate address to an Ethereum-compatible address.
+ * 
+ * This function first decodes an SS58 address to its corresponding public key,
+ * and then derives the Ethereum address by taking the first 20 bytes of this hash,
+ * converting them into an H160 Ethereum address format.
+ *
+ * @param {string} ss58Address The SS58 formatted Substrate address to be converted.
+ * @returns {string} The derived Ethereum H160 address as a hexadecimal string.
+ */
+export function ss58ToH160(ss58Address) {
+  // Decode the SS58 address to a Uint8Array public key
+  const publicKey = decodeAddress(ss58Address);
+
+  // Take the first 20 bytes of the hashed public key for the Ethereum address
+  const ethereumAddressBytes = publicKey.slice(0, 20);
+
+  // Convert the 20 bytes into an Ethereum H160 address format (Hex string)
+  const ethereumAddress = '0x' + Buffer.from(ethereumAddressBytes).toString('hex');
+
+  return ethereumAddress;
 }
