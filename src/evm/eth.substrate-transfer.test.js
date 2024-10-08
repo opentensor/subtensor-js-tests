@@ -4,6 +4,9 @@ import { convertEtherToWei, convertWeiToEther, convertTaoToRao, convertRaoToTao 
 import { convertH160ToSS58, generateRandomAddress } from '../util/address.js';
 import { getEthereumBalance, estimateTransactionCost, sendEthTransaction } from '../util/eth-helpers.js';
 import { getExistentialDeposit, getTaoBalance } from '../util/helpers.js';
+import { decodeAddress } from '@polkadot/util-crypto';
+import { ethers } from "ethers";
+import BigNumber from 'bignumber.js';
 import { expect } from 'chai';
 
 let tk;
@@ -100,8 +103,61 @@ describe('Balance transfers between substrate and EVM', () => {
   });
   
   it('Transfer from EVM to substrate using precompile', async () => {
-    // Generally, copy+paste from here:
-    // https://github.com/gztensor/evm-demo/blob/main/withdraw.js
+    // Precompile smart contract address:
+    const contractAddress = '0x0000000000000000000000000000000000000800';
+
+    // This is the SubtensorBalanceTransfer smart contract ABI, located in subtensor repository at: 
+    // runtime/src/precompiles/balanceTransfer.abi
+    const abi = [
+      {
+          "inputs": [
+              {
+                  "internalType": "bytes32",
+                  "name": "data",
+                  "type": "bytes32"
+              }
+          ],
+          "name": "transfer",
+          "outputs": [],
+          "stateMutability": "payable",
+          "type": "function"
+      }
+    ];
+
+    // Recipient address on substrate side
+    const alicess58 = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
+    const alicePubKey = decodeAddress(alicess58);
+
+    // Check Alice's balance before transaction
+    let aliceBalanceBefore;
+    await usingApi(async api => {
+      aliceBalanceBefore = await getTaoBalance(api, alicess58);
+    });
+
+    // Send 0.5 TAO along with the transaction
+    const amountEth = 0.5;
+    const amountStr = convertEtherToWei(amountEth).toString();
+    await usingEthApi(async provider => {
+      // Create a contract instance
+      const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+      const contract = new ethers.Contract(contractAddress, abi, signer);
+
+      // Execute transaction
+      const tx = await contract.transfer(alicePubKey, { value: amountStr });
+      await tx.wait();
+    });
+
+    // Check Alice's balance
+    let aliceBalanceAfter;
+    await usingApi(async api => {
+      aliceBalanceAfter = new BigNumber(await getTaoBalance(api, alicess58));
+    });
+
+    const amountSub = convertTaoToRao(amountEth);
+    expect(aliceBalanceAfter
+      .minus(aliceBalanceBefore)
+      .toString()
+    ).to.be.equal(amountSub.toString());
   });
 
   it('Transfer from EVM to substrate using evm::withdraw', async () => {
