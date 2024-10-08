@@ -78,7 +78,6 @@ describe('Balance transfers between substrate and EVM', () => {
 
       // Get gas price and transfer cost
       const txPrice = await estimateTransactionCost(provider, tx);
-      console.log(`txPrice = ${txPrice.toString()}`);
 
       // Send the transaction
       await sendEthTransaction(provider, fundedEthWallet, tx);
@@ -203,6 +202,59 @@ describe('Balance transfers between substrate and EVM', () => {
   });
 
   it('Transfer value using evm::call', async () => {
+    const amount = 1.0;
+    const amountStr = convertEtherToWei(amount).toString();
+    const amount05 = 0.5;
+    const amount05Str = convertEtherToWei(amount05).toString();
+
+    // Generate a random H160 address
+    const recipient = generateRandomAddress().address;
+
+    // Transaction caller on substrate side
+    const alice = tk.alice;
+    const aliceEthereumAddress = ss58ToH160(alice.address);
+
+    // Transfer to Alice's ethereum mirror to prepare for evm::call
+    let ethBalanceBefore;
+    await usingEthApi(async provider => {
+      const tx = {
+        to: aliceEthereumAddress,
+        value: amountStr
+      };
+      await sendEthTransaction(provider, fundedEthWallet, tx);
+
+      // Check balances
+      ethBalanceBefore = await getEthereumBalance(provider, recipient);
+    });
+
+    // Execute evm::call to transfer from Alice's mirror to recipient
+    await usingApi(async api => {
+      const withdraw = api.tx.evm.call(
+        aliceEthereumAddress,
+        recipient,
+        "",          // tx data
+        amount05Str,   // amount
+        21000,       // gas limit
+        10e9,        // max fee per gas
+        null,
+        null,
+        null
+      );
+      await sendTransaction(api, withdraw, tk.alice);
+    });
+
+    // Check balances
+    let ethBalanceAfter;
+    const ed_eth = convertEtherToWei(convertRaoToTao(ed))
+    await usingEthApi(async provider => {
+      ethBalanceAfter = await getEthereumBalance(provider, recipient);
+    });
+
+    expect(ethBalanceAfter
+      .minus(ethBalanceBefore)
+      .plus(ed_eth)
+      .toString()
+    ).to.be.equal(amount05Str);
   });
 
   it('Forward value in smart contract', async () => {
