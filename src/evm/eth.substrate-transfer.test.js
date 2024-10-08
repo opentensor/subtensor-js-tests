@@ -261,10 +261,15 @@ describe('Balance transfers between substrate and EVM', () => {
     // Deploy a smart contract (bytecode can be pre-built) that has a payable 
     // method that sends all received value to an address
     // Verify that received value is accurate on the final destination address.
+
+    assert(false, "TODO");
   });
 
   it('Transfer full balance', async () => {
     // See the test "Transfer between two EVM accounts" for how to estaimate tx fee
+    // Ensure that resulting sender balance is 0
+
+    assert(false, "TODO");
   });
 
   it('Transfer more than owned balance should fail', async () => {
@@ -317,9 +322,17 @@ describe('Balance transfers between substrate and EVM', () => {
     //   - evm::withdraw
     //   - evm::call
     // do not panic on U256 to balance conversion
+    //
+    // Use existing tests above to execute transfers
+
+    assert(false, "TODO");
   });
 
   it('Gas price should be 10 GWei', async () => {
+    await usingEthApi(async provider => {
+      const feeData = await provider.getFeeData();
+      expect(feeData.gasPrice.toString()).to.be.equal("10000000000");
+    });
   });
 
   it('max_fee_per_gas and max_priority_fee_per_gas do not affect transaction fee', async () => {
@@ -346,5 +359,7 @@ describe('Balance transfers between substrate and EVM', () => {
     // }
     
     // sendTransaction();
+
+    assert(false, "TODO");
   });
 });
