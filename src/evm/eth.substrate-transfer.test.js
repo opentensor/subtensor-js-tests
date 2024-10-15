@@ -335,31 +335,62 @@ describe('Balance transfers between substrate and EVM', () => {
     });
   });
 
-  it('max_fee_per_gas and max_priority_fee_per_gas do not affect transaction fee', async () => {
-    // Split into as many tests as needed. Here's how to twickle maxPriorityFeePerGas and maxFeePerGas:
+  it('max_fee_per_gas and max_priority_fee_per_gas affect transaction fee properly', async () => {
+    const gwei = new BigNumber("1000000000");
 
-    // const { ethers } = require("ethers");
+    const testCases = [
+      [10, 0, 21000 * 10 * 1e9],
+      [10, 10, 21000 * 10 * 1e9],
+      [11, 0, 21000 * 10 * 1e9],
+      [11, 1, (21000 * 10 + 21000) * 1e9],
+      [11, 2, (21000 * 10 + 21000) * 1e9],
+    ];
 
-    // // Assuming you have a provider and signer set up
-    // const provider = new ethers.providers.JsonRpcProvider(process.env.RPC_URL);
-    // const signer = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
-    
-    // async function sendTransaction() {
-    //     const tx = {
-    //         to: "0xRecipientAddressHere",
-    //         value: ethers.utils.parseEther("0.1"),
-    //         // EIP-1559 transaction parameters
-    //         maxPriorityFeePerGas: ethers.utils.parseUnits("2", "gwei"),
-    //         maxFeePerGas: ethers.utils.parseUnits("100", "gwei"),
-    //         gasLimit: 21000,  // For a simple ETH transfer
-    //     };
-    
-    //     const response = await signer.sendTransaction(tx);
-    //     console.log(response);
-    // }
-    
-    // sendTransaction();
+    for (let i in testCases) {
+      const tc = testCases[i];
+      const actualFee = await transferAndGetFee(gwei.multipliedBy(tc[0]), gwei.multipliedBy(tc[1]));
+      expect(actualFee.toNumber()).to.be.equal(tc[2]);
+    }
+  });
 
-    assert(false, "TODO");
+  it('Low max_fee_per_gas gets transaction rejected', async () => {
+    const gwei = new BigNumber("1000000000");
+    await expect(transferAndGetFee(gwei.multipliedBy(9), gwei.multipliedBy(0))).to.be.rejectedWith("gas price less than block base fee");
+  });
+
+  it('max_fee_per_gas lower than max_priority_fee_per_gas gets transaction rejected', async () => {
+    const gwei = new BigNumber("1000000000");
+    await expect(transferAndGetFee(gwei.multipliedBy(10), gwei.multipliedBy(11))).to.be.rejectedWith("priorityFee cannot be more than maxFee");
   });
 });
+
+async function transferAndGetFee(max_fee_per_gas, max_priority_fee_per_gas) {
+  let fee;
+  await usingEthApi(async provider => {
+    // Generate a random H160 address
+    const recipient = generateRandomAddress().address;
+    const amount = convertEtherToWei(0.1);
+
+    // Check balances
+    const ethBalanceBefore = await getEthereumBalance(provider, fundedEthWallet.address);
+
+    // Send TAO
+    const tx = {
+      to: recipient,
+      value: amount.toString(),
+      // EIP-1559 transaction parameters
+      maxPriorityFeePerGas: max_priority_fee_per_gas.toString(),
+      maxFeePerGas: max_fee_per_gas.toString(),
+      gasLimit: 21000,
+    };
+
+    // Send the transaction
+    await sendEthTransaction(provider, fundedEthWallet, tx);
+
+    // Check balances
+    const ethBalanceAfter = await getEthereumBalance(provider, fundedEthWallet.address);
+    fee = ethBalanceBefore.minus(ethBalanceAfter.plus(amount));
+  });
+
+  return fee;
+}
