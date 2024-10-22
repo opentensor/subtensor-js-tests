@@ -105,8 +105,12 @@ describe("Staking precompile", () => {
       const register = api.tx.subtensorModule.rootRegister(tk.bob.address);
       await sendTransaction(api, register, tk.alice);
 
+      let old_owner = (
+        await api.query.subtensorModule.owner(tk.bob.address)
+      ).toString();
+
       const swapCold = api.tx.sudo.sudo(
-        api.tx.subtensorModule.swapColdkey(tk.alice.address, tk.charlie.address)
+        api.tx.subtensorModule.swapColdkey(tk.alice.address, ss58mirror)
       );
       await sendTransaction(api, swapCold, tk.alice);
 
@@ -115,8 +119,24 @@ describe("Staking precompile", () => {
         ss58mirror
       );
 
+      // wait for coldkey swap done
+      while (true) {
+        let current_owner = (
+          await api.query.subtensorModule.owner(tk.bob.address)
+        ).toString();
+
+        if (current_owner !== old_owner) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        console.log(
+          "waiting for coldkey swap, please check coldkey swap duration in runtime if take a long time"
+        );
+      }
+
       await usingEthApi(async (provider) => {
-        // Create a contract instance
+        // Create a contract instances
         const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
 
         const contract = new ethers.Contract(address, abi, signer);
@@ -132,6 +152,7 @@ describe("Staking precompile", () => {
         tk.bob.address,
         ss58mirror
       );
+
       expect(stake > before_stake);
     });
   });
