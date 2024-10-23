@@ -366,8 +366,40 @@ describe("Balance transfers between substrate and EVM", () => {
   it("Transfer full balance", async () => {
     // See the test "Transfer between two EVM accounts" for how to estaimate tx fee
     // Ensure that resulting sender balance is 0
+    await usingEthApi(async (provider) => {
+      const aliceEthereumAddress = ss58ToH160(tk.alice.address);
 
-    assert(false, "TODO");
+      let ethBalance = await getEthereumBalance(
+        provider,
+        fundedEthWallet.address
+      );
+      console.log("ethBalance is ", ethBalance);
+
+      const tx = {
+        to: aliceEthereumAddress,
+        value: ethBalance.toString(),
+      };
+
+      // Get gas price and transfer cost
+      const txPrice = await estimateTransactionCost(provider, tx);
+      console.log("txPrice is ", txPrice);
+
+      // tx price is correct, but chain can not accept the account balance is zero
+      const finalTx = {
+        to: aliceEthereumAddress,
+        // if we use ethBalance - txPrice, it will be failed
+        value: (ethBalance - txPrice * 2).toString(),
+      };
+
+      await sendEthTransaction(provider, fundedEthWallet, finalTx);
+
+      // the balance of account is the same as tx price
+      let ethBalanceAfter = await getEthereumBalance(
+        provider,
+        fundedEthWallet.address
+      );
+      console.log("ethBalanceAfter is ", ethBalanceAfter);
+    });
   });
 
   it("Transfer more than owned balance should fail", async () => {
