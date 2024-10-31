@@ -25,7 +25,6 @@ describe('Smart contract deployment', () => {
       const txSudoSetBalance = api.tx.sudo.sudo(
         api.tx.balances.forceSetBalance(tk.alice.address, amount1TAO.multipliedBy(1e6).toString())
       );
-
       await sendTransaction(api, txSudoSetBalance, tk.alice);
 
       // Alice funds fundedEthWallet
@@ -68,9 +67,16 @@ describe('Smart contract deployment', () => {
       ];
 
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+
+      // Alice gives permission to signer to create a contract
+      const txSudoSetWhitelist = api.tx.sudo.sudo(
+        api.tx.evm.setWhitelist([signer.address])
+      );
+
+      await sendTransaction(api, txSudoSetWhitelist, tk.alice);
       const contractFactory = new ethers.ContractFactory(abi, byteCode, signer);
       const contract = await contractFactory.deploy();
-    
+
       await contract.waitForDeployment();
 
       // Assert that the contract is deployed
