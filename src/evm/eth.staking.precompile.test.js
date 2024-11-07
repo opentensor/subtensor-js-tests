@@ -84,6 +84,11 @@ describe("Staking precompile", () => {
         amount1TAO.multipliedBy(100).toString()
       );
       await sendTransaction(api, transfer, tk.alice);
+
+      const txSudoSetTargetStakesPerInterval = api.tx.sudo.sudo(
+        api.tx.adminUtils.sudoSetTargetStakesPerInterval(10)
+      );
+      await sendTransaction(api, txSudoSetTargetStakesPerInterval, tk.alice);
     });
   });
 
