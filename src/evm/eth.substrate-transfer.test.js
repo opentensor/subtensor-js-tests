@@ -373,7 +373,6 @@ describe("Balance transfers between substrate and EVM", () => {
         provider,
         fundedEthWallet.address
       );
-      console.log("ethBalance is ", ethBalance);
 
       const tx = {
         to: aliceEthereumAddress,
@@ -382,7 +381,6 @@ describe("Balance transfers between substrate and EVM", () => {
 
       // Get gas price and transfer cost
       const txPrice = await estimateTransactionCost(provider, tx);
-      console.log("txPrice is ", txPrice);
 
       // tx price is correct, but chain can not accept the account balance is zero
       const finalTx = {
@@ -448,16 +446,97 @@ describe("Balance transfers between substrate and EVM", () => {
   });
 
   it("Transfer more than u64::max in substrate equivalent should receive error response", async () => {
-    // This is to verify that all transfer methods:
-    //   - plain Ethereum h160 > h160 transfer
-    //   - transfer precompile
-    //   - evm::withdraw
-    //   - evm::call
-    // do not panic on U256 to balance conversion
-    //
-    // Use existing tests above to execute transfers
+    await usingEthApi(async (provider) => {
+      // This is to verify that all transfer methods:
+      //   - plain Ethereum h160 > h160 transfer
+      //   - transfer precompile
+      //   - evm::withdraw
+      //   - evm::call
+      // do not panic on U256 to balance conversion
+      //
+      // Use existing tests above to execute transfers
+      const recipient = generateRandomAddress().address;
+      const amount = convertEtherToWei(10000000000000);
 
-    assert(false, "TODO");
+      // Send TAO
+      const sendTx = {
+        to: recipient,
+        value: amount.toString(),
+      };
+
+      try {
+        await sendEthTransaction(provider, fundedEthWallet, sendTx);
+      } catch (error) {
+        expect(error.toString().includes("Cannot convert"));
+      }
+
+      const contractAddress = "0x0000000000000000000000000000000000000800";
+      const abi = [
+        {
+          inputs: [
+            {
+              internalType: "bytes32",
+              name: "data",
+              type: "bytes32",
+            },
+          ],
+          name: "transfer",
+          outputs: [],
+          stateMutability: "payable",
+          type: "function",
+        },
+      ];
+
+      const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+      const contract = new ethers.Contract(contractAddress, abi, signer);
+
+      try {
+        await contract.transfer(recipient, {
+          value: amount.toString(),
+        });
+      } catch (error) {
+        expect(error.toString().includes("Cannot convert"));
+      }
+    });
+
+    await usingApi(async (api) => {
+      // amount is over u64::max
+      let amount = "1000000000000000000000";
+
+      // for substrate treansaction, failed in build a transfer call
+      const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
+      try {
+        api.tx.balances.transferKeepAlive(ss58mirror, amount);
+      } catch (error) {
+        expect(error.toString().includes("Input too large"));
+      }
+
+      const recipient = generateRandomAddress().address;
+
+      try {
+        api.tx.evm.withdraw(recipient, amount);
+      } catch (error) {
+        expect(error.toString().includes("Input too large"));
+      }
+
+      try {
+        const aliceEthereumAddress = ss58ToH160(tk.alice.address);
+        const evmCall = api.tx.evm.call(
+          aliceEthereumAddress,
+          recipient,
+          "", // tx data
+          amount, // amount
+          21000, // gas limit
+          10e9, // max fee per gas
+          null,
+          null,
+          null
+        );
+        await sendTransaction(api, evmCall, tk.alice);
+      } catch (error) {
+        expect(error.toString().includes("BalanceLow"));
+      }
+    });
   });
 
   it("Gas price should be 10 GWei", async () => {
