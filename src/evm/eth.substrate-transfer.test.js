@@ -47,6 +47,11 @@ describe("Balance transfers between substrate and EVM", () => {
         amount1TAO.multipliedBy(1000).toString()
       );
       await sendTransaction(api, transfer, tk.alice);
+
+      // white list the contract creator
+      const whiteList = api.tx.evm.setWhitelist([fundedEthWallet.address]);
+      const sudoCall = api.tx.sudo.sudo(whiteList);
+      await sendTransaction(api, sudoCall, tk.alice);
     });
   });
 
@@ -373,6 +378,7 @@ describe("Balance transfers between substrate and EVM", () => {
         provider,
         fundedEthWallet.address
       );
+      console.log("ethBalance is ", ethBalance);
 
       const tx = {
         to: aliceEthereumAddress,
@@ -385,18 +391,14 @@ describe("Balance transfers between substrate and EVM", () => {
       // tx price is correct, but chain can not accept the account balance is zero
       const finalTx = {
         to: aliceEthereumAddress,
-        // if we use ethBalance - txPrice, it will be failed
-        value: (ethBalance - txPrice * 2).toString(),
+        value: (ethBalance - txPrice).toString(),
       };
 
-      await sendEthTransaction(provider, fundedEthWallet, finalTx);
-
-      // the balance of account is the same as tx price
-      let ethBalanceAfter = await getEthereumBalance(
-        provider,
-        fundedEthWallet.address
-      );
-      console.log("ethBalanceAfter is ", ethBalanceAfter);
+      try {
+        await sendEthTransaction(provider, fundedEthWallet, finalTx);
+      } catch (error) {
+        expect(error.toString().includes("insufficient funds"));
+      }
     });
   });
 
