@@ -33,6 +33,11 @@ let abi = [
         name: "hotkey",
         type: "bytes32",
       },
+      {
+        internalType: "uint16",
+        name: "netuid",
+        type: "uint16",
+      },
     ],
     name: "addStake",
     outputs: [],
@@ -47,17 +52,47 @@ let abi = [
         type: "bytes32",
       },
       {
+        internalType: "bytes32",
+        name: "coldkey",
+        type: "bytes32",
+      },
+    ],
+    name: "getStake",
+    outputs: [
+      {
+        internalType: "uint64",
+        name: "",
+        type: "uint64",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "hotkey",
+        type: "bytes32",
+      },
+      {
         internalType: "uint256",
         name: "amount",
         type: "uint256",
       },
+      {
+        internalType: "uint16",
+        name: "netuid",
+        type: "uint16",
+      },
     ],
     name: "removeStake",
     outputs: [],
-    stateMutability: "payable",
+    stateMutability: "nonpayable",
     type: "function",
   },
 ];
+
 let address = "0x0000000000000000000000000000000000000801";
 
 describe("Staking precompile", () => {
@@ -97,6 +132,7 @@ describe("Staking precompile", () => {
       // Use this example: https://github.com/gztensor/evm-demo/blob/main/docs/staking-precompile.md
 
       const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
+      const netuid = 1;
 
       let balanceBefore;
       await usingApi(async (api) => {
@@ -147,7 +183,7 @@ describe("Staking precompile", () => {
         const contract = new ethers.Contract(address, abi, signer);
 
         // Execute transaction
-        const tx = await contract.addStake(tk.bob.publicKey, {
+        const tx = await contract.addStake(tk.bob.publicKey, netuid, {
           value: amountStr,
         });
         await tx.wait();
@@ -167,6 +203,7 @@ describe("Staking precompile", () => {
       // Use this example: https://github.com/gztensor/evm-demo/blob/main/docs/staking-precompile.md
       const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+      const netuid = 1;
 
       const amountEth = 0.5;
       const amountStr = convertEtherToWei(amountEth).toString();
@@ -181,6 +218,7 @@ describe("Staking precompile", () => {
       const tx = await contract.removeStake(
         tk.bob.publicKey,
         "1000000000000000",
+        netuid,
         { value: amountStr }
       );
       await tx.wait();
