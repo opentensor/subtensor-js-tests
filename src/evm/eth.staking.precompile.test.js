@@ -6,7 +6,11 @@ import {
   convertTaoToRao,
   convertRaoToTao,
 } from "../util/balance-math.js";
-import { convertH160ToSS58, generateRandomAddress } from "../util/address.js";
+import {
+  convertH160ToSS58,
+  generateRandomAddress,
+  convertH160ToPublicKey,
+} from "../util/address.js";
 import {
   getEthereumBalance,
   estimateTransactionCost,
@@ -18,6 +22,7 @@ import { decodeAddress } from "@polkadot/util-crypto";
 import { assert, ethers } from "ethers";
 import BigNumber from "bignumber.js";
 import { expect } from "chai";
+import exp from "constants";
 
 let tk;
 const amount1TAO = convertTaoToRao(1.0);
@@ -179,14 +184,30 @@ describe("Staking precompile", () => {
       await usingEthApi(async (provider) => {
         // Create a contract instances
         const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+        const publicKey = convertH160ToPublicKey(fundedEthWallet.address);
 
         const contract = new ethers.Contract(address, abi, signer);
+
+        // get stake via contract method
+        const stake_from_contract = await contract.getStake(
+          tk.bob.publicKey,
+          publicKey
+        );
+
+        expect(stake_from_contract == 0);
 
         // Execute transaction
         const tx = await contract.addStake(tk.bob.publicKey, netuid, {
           value: amountStr,
         });
         await tx.wait();
+
+        const stake_after_tx = await contract.getStake(
+          tk.bob.publicKey,
+          publicKey
+        );
+
+        expect(amountStr == stake_after_tx.toString());
       });
 
       let stake = await api.query.subtensorModule.stake(
