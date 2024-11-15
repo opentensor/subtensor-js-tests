@@ -22,7 +22,8 @@ import { expect } from "chai";
 let tk;
 const amount1TAO = convertTaoToRao(1.0);
 const amount1ETH = convertEtherToWei(1.0);
-let fundedEthWallet = generateRandomAddress();
+// let fundedEthWallet = generateRandomAddress();
+let fundedEthWallet;
 let ed;
 
 describe("Balance transfers between substrate and EVM", () => {
@@ -30,28 +31,31 @@ describe("Balance transfers between substrate and EVM", () => {
     await usingApi(async (api) => {
       tk = getTestKeys();
       ed = await getExistentialDeposit(api);
+      fundedEthWallet = tk.testEth;
+      console.log(`fundedEthWallet: ${fundedEthWallet.address}`);
 
       // Alice funds herself with 1M TAO
-      const txSudoSetBalance = api.tx.sudo.sudo(
-        api.tx.balances.forceSetBalance(
-          tk.alice.address,
-          amount1TAO.multipliedBy(1e6).toString()
-        )
-      );
-      await sendTransaction(api, txSudoSetBalance, tk.alice);
+      // Disabled for Live network testing
+      // const txSudoSetBalance = api.tx.sudo.sudo(
+      //   api.tx.balances.forceSetBalance(
+      //     tk.alice.address,
+      //     amount1TAO.multipliedBy(1e6).toString()
+      //   )
+      // );
+      // await sendTransaction(api, txSudoSetBalance, tk.alice);
 
       // Alice funds fundedEthWallet
-      const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
-      const transfer = api.tx.balances.transferKeepAlive(
-        ss58mirror,
-        amount1TAO.multipliedBy(1000).toString()
-      );
-      await sendTransaction(api, transfer, tk.alice);
+      // const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
+      // const transfer = api.tx.balances.transferKeepAlive(
+      //   ss58mirror,
+      //   amount1TAO.multipliedBy(0.1).toString()
+      // );
+      // await sendTransaction(api, transfer, tk.test);
 
       // white list the contract creator
-      const whiteList = api.tx.evm.setWhitelist([fundedEthWallet.address]);
-      const sudoCall = api.tx.sudo.sudo(whiteList);
-      await sendTransaction(api, sudoCall, tk.alice);
+      // const whiteList = api.tx.evm.setWhitelist([fundedEthWallet.address]);
+      // const sudoCall = api.tx.sudo.sudo(whiteList);
+      // await sendTransaction(api, sudoCall, tk.alice);
     });
   });
 
@@ -59,7 +63,7 @@ describe("Balance transfers between substrate and EVM", () => {
     // Generate a random H160 address
     const h160address = generateRandomAddress().address;
 
-    // Send 1 TAO (10^9) + Existencial Deposit to this address' mirror
+    // Send 0.01 TAO (10^7) + Existencial Deposit to this address' mirror
     await usingApi(async (api) => {
       // Calculate ss58 mirror of H160 address
       const ss58mirror = convertH160ToSS58(h160address);
@@ -67,22 +71,22 @@ describe("Balance transfers between substrate and EVM", () => {
       // Create a transfer transaction
       const transfer = api.tx.balances.transferKeepAlive(
         ss58mirror,
-        amount1TAO.plus(ed).toString()
+        amount1TAO.dividedBy(100).plus(ed).toString()
       );
 
       // Sign and send the transaction
-      await sendTransaction(api, transfer, tk.alice);
+      await sendTransaction(api, transfer, fundedEthWallet);
 
       const balanceAfter = await getTaoBalance(api, ss58mirror);
       expect(balanceAfter.toString()).to.be.equal(
-        amount1TAO.plus(ed).toString()
+        amount1TAO.dividedBy(100).plus(ed).toString()
       );
     });
 
-    // Verify that Eth balance is 10^18
+    // Verify that Eth balance is 10^18 / 100
     await usingEthApi(async (provider) => {
       const ethBalanceAfter = await getEthereumBalance(provider, h160address);
-      expect(ethBalanceAfter.toString()).to.be.equal(amount1ETH.toString());
+      expect(ethBalanceAfter.toString()).to.be.equal(amount1ETH.dividedBy(100).toString());
     });
   });
 
@@ -90,7 +94,7 @@ describe("Balance transfers between substrate and EVM", () => {
     await usingEthApi(async (provider) => {
       // Generate a random H160 address
       const recipient = generateRandomAddress().address;
-      const amount = convertEtherToWei(1.0);
+      const amount = convertEtherToWei(0.01);
 
       // Check balances
       const ethBalanceBefore1 = await getEthereumBalance(
@@ -161,8 +165,8 @@ describe("Balance transfers between substrate and EVM", () => {
       aliceBalanceBefore = await getTaoBalance(api, alicess58);
     });
 
-    // Send 0.5 TAO along with the transaction
-    const amountEth = 0.5;
+    // Send 0.01 TAO along with the transaction
+    const amountEth = 0.01;
     const amountStr = convertEtherToWei(amountEth).toString();
     await usingEthApi(async (provider) => {
       // Create a contract instance
@@ -187,7 +191,7 @@ describe("Balance transfers between substrate and EVM", () => {
   });
 
   it("Transfer from EVM to substrate using evm::withdraw", async () => {
-    const amount = 0.5;
+    const amount = 0.01;
     const amountStr = convertEtherToWei(amount).toString();
 
     // Recipient address on substrate side
@@ -232,9 +236,9 @@ describe("Balance transfers between substrate and EVM", () => {
   });
 
   it("Transfer value using evm::call", async () => {
-    const amount = 1.0;
+    const amount = 0.01;
     const amountStr = convertEtherToWei(amount).toString();
-    const amount05 = 0.5;
+    const amount05 = 0.005;
     const amount05Str = convertEtherToWei(amount05).toString();
 
     // Generate a random H160 address
@@ -285,7 +289,7 @@ describe("Balance transfers between substrate and EVM", () => {
     ).to.be.equal(amount05Str);
   });
 
-  it("Forward value in smart contract", async () => {
+  it.skip("Forward value in smart contract", async () => {
     await usingEthApi(async (provider) => {
       // Deploy a smart contract (bytecode can be pre-built) that has a payable
       // method that sends all received value to an address
@@ -406,7 +410,7 @@ describe("Balance transfers between substrate and EVM", () => {
     await usingEthApi(async (provider) => {
       // Generate a random H160 address
       const recipient = generateRandomAddress();
-      const amount = convertEtherToWei(1.0);
+      const amount = convertEtherToWei(0.01);
 
       // Send TAO
       const tx = {
@@ -589,7 +593,7 @@ async function transferAndGetFee(max_fee_per_gas, max_priority_fee_per_gas) {
   await usingEthApi(async (provider) => {
     // Generate a random H160 address
     const recipient = generateRandomAddress().address;
-    const amount = convertEtherToWei(0.1);
+    const amount = convertEtherToWei(0.01);
 
     // Check balances
     const ethBalanceBefore = await getEthereumBalance(

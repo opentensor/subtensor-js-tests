@@ -1,5 +1,6 @@
 import { Keyring } from '@polkadot/api';
 import { randomBytes } from 'crypto';
+import { ethers } from "ethers";
 
 export function getTestKeys() {
     const keyring = new Keyring({ type: 'sr25519' });
@@ -13,7 +14,9 @@ export function getTestKeys() {
         dave: keyring.addFromUri('//Dave'),
         daveHot: keyring.addFromUri('//DaveHot'),
         eve: keyring.addFromUri('//Eve'),
-        zari: keyring.addFromUri('//Zari')
+        zari: keyring.addFromUri('//Zari'),
+        test: keyring.addFromUri('diary drift squeeze nerve forward swift flip exact other crane guard work'),
+        testEth: ethers.Wallet.fromPhrase('diary drift squeeze nerve forward swift flip exact other crane guard work'),
     };
 }
 

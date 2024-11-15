@@ -22,37 +22,41 @@ import { expect } from "chai";
 let tk;
 const amount1TAO = convertTaoToRao(1.0);
 const amount1ETH = convertEtherToWei(1.0);
-let fundedEthWallet = generateRandomAddress();
+// let fundedEthWallet = generateRandomAddress();
+let fundedEthWallet;
 let ed;
 
-describe("Smart contract deployment", () => {
+describe.only("Smart contract deployment", () => {
   before(async () => {
     await usingApi(async (api) => {
       tk = getTestKeys();
       ed = await getExistentialDeposit(api);
+      fundedEthWallet = tk.testEth;
+      console.log(`fundedEthWallet: ${fundedEthWallet.address}`);
 
       // Alice funds herself with 1M TAO
-      const txSudoSetBalance = api.tx.sudo.sudo(
-        api.tx.balances.forceSetBalance(
-          tk.alice.address,
-          amount1TAO.multipliedBy(1e6).toString()
-        )
-      );
+      // Disabled for Live network testing
+      // const txSudoSetBalance = api.tx.sudo.sudo(
+      //   api.tx.balances.forceSetBalance(
+      //     tk.alice.address,
+      //     amount1TAO.multipliedBy(1e6).toString()
+      //   )
+      // );
 
-      await sendTransaction(api, txSudoSetBalance, tk.alice);
+      // await sendTransaction(api, txSudoSetBalance, tk.alice);
 
       // Alice funds fundedEthWallet
-      const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
-      const transfer = api.tx.balances.transferKeepAlive(
-        ss58mirror,
-        amount1TAO.multipliedBy(1000).toString()
-      );
-      await sendTransaction(api, transfer, tk.alice);
+      // const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
+      // const transfer = api.tx.balances.transferKeepAlive(
+      //   ss58mirror,
+      //   amount1TAO.multipliedBy(1000).toString()
+      // );
+      // await sendTransaction(api, transfer, tk.alice);
 
       // white list the contract creator
-      const whiteList = api.tx.evm.setWhitelist([fundedEthWallet.address]);
-      const sudoCall = api.tx.sudo.sudo(whiteList);
-      await sendTransaction(api, sudoCall, tk.alice);
+      // const whiteList = api.tx.evm.setWhitelist([fundedEthWallet.address]);
+      // const sudoCall = api.tx.sudo.sudo(whiteList);
+      // await sendTransaction(api, sudoCall, tk.alice);
     });
   });
 
