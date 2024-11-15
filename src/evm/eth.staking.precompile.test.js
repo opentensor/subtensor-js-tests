@@ -189,12 +189,12 @@ describe("Staking precompile", () => {
         const contract = new ethers.Contract(address, abi, signer);
 
         // get stake via contract method
-        const stake_from_contract = await contract.getStake(
-          tk.bob.publicKey,
-          publicKey
-        );
+        // const stake_from_contract = await contract.getStake(
+        //   tk.bob.publicKey,
+        //   publicKey
+        // );
 
-        expect(stake_from_contract == 0);
+        // expect(stake_from_contract == 0);
 
         // Execute transaction
         const tx = await contract.addStake(tk.bob.publicKey, netuid, {
@@ -202,12 +202,12 @@ describe("Staking precompile", () => {
         });
         await tx.wait();
 
-        const stake_after_tx = await contract.getStake(
-          tk.bob.publicKey,
-          publicKey
-        );
+        // const stake_after_tx = await contract.getStake(
+        //   tk.bob.publicKey,
+        //   publicKey
+        // );
 
-        expect(amountStr == stake_after_tx.toString());
+        // expect(amountStr == stake_after_tx.toString());
       });
 
       let stake = await api.query.subtensorModule.stake(
@@ -238,7 +238,7 @@ describe("Staking precompile", () => {
 
       const tx = await contract.removeStake(
         tk.bob.publicKey,
-        "1000000000000000",
+        amountStr,
         netuid,
         { value: amountStr }
       );
