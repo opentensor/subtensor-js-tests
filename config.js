@@ -1,7 +1,7 @@
 import BigNumber from 'bignumber.js';
 
-export const WS_ENDPOINT = "ws://localhost:9946";
-export const RPC_ENDPOINT = "http://localhost:9946";
+export const WS_ENDPOINT = "ws://localhost:9944";
+export const RPC_ENDPOINT = "http://localhost:9944";
 export const CONN_TIMEOUT = 10000;
 
 export const netuid = 1;
