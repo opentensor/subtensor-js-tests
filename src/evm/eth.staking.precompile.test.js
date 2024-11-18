@@ -115,6 +115,15 @@ describe("Staking precompile", () => {
       );
       await sendTransaction(api, txSudoSetBalance, tk.alice);
 
+      // Alice funds eve with 1M TAO, eve will be coldkey for staking
+      const txSudoSetCharlieBalance = api.tx.sudo.sudo(
+        api.tx.balances.forceSetBalance(
+          tk.eve.address,
+          amount1TAO.multipliedBy(1e6).toString()
+        )
+      );
+      await sendTransaction(api, txSudoSetCharlieBalance, tk.alice);
+
       // Alice funds fundedEthWallet
       const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
       console.log("fundedEthWallet ss58 address is: ", ss58mirror);
@@ -147,28 +156,28 @@ describe("Staking precompile", () => {
       const amountEth = 0.5;
       const amountStr = convertEtherToWei(amountEth).toString();
 
-      // register alice and bob as coldkey / hotkey
-      const register = api.tx.subtensorModule.rootRegister(tk.bob.address);
-      await sendTransaction(api, register, tk.alice);
+      // register eve and zari as coldkey / hotkey
+      const register = api.tx.subtensorModule.rootRegister(tk.zari.address);
+      await sendTransaction(api, register, tk.eve);
 
       let old_owner = (
-        await api.query.subtensorModule.owner(tk.bob.address)
+        await api.query.subtensorModule.owner(tk.zari.address)
       ).toString();
 
       const swapCold = api.tx.sudo.sudo(
-        api.tx.subtensorModule.swapColdkey(tk.alice.address, ss58mirror)
+        api.tx.subtensorModule.swapColdkey(tk.eve.address, ss58mirror)
       );
       await sendTransaction(api, swapCold, tk.alice);
 
       let before_stake = await api.query.subtensorModule.stake(
-        tk.bob.address,
+        tk.zari.address,
         ss58mirror
       );
 
       // wait for coldkey swap done
       while (true) {
         let current_owner = (
-          await api.query.subtensorModule.owner(tk.bob.address)
+          await api.query.subtensorModule.owner(tk.zari.address)
         ).toString();
 
         if (current_owner !== old_owner) {
@@ -197,7 +206,7 @@ describe("Staking precompile", () => {
         // expect(stake_from_contract == 0);
 
         // Execute transaction
-        const tx = await contract.addStake(tk.bob.publicKey, netuid, {
+        const tx = await contract.addStake(tk.zari.publicKey, netuid, {
           value: amountStr,
         });
         await tx.wait();
@@ -211,10 +220,9 @@ describe("Staking precompile", () => {
       });
 
       let stake = await api.query.subtensorModule.stake(
-        tk.bob.address,
+        tk.zari.address,
         ss58mirror
       );
-
       expect(stake > before_stake);
     });
   });
@@ -232,12 +240,12 @@ describe("Staking precompile", () => {
       const contract = new ethers.Contract(address, abi, signer);
 
       let before_stake = await api.query.subtensorModule.stake(
-        tk.bob.address,
+        tk.zari.address,
         ss58mirror
       );
 
       const tx = await contract.removeStake(
-        tk.bob.publicKey,
+        tk.zari.publicKey,
         amountStr,
         netuid,
         { value: amountStr }
@@ -245,7 +253,7 @@ describe("Staking precompile", () => {
       await tx.wait();
 
       let stake = await api.query.subtensorModule.stake(
-        tk.bob.address,
+        tk.zari.address,
         ss58mirror
       );
       expect(stake < before_stake);
