@@ -61,12 +61,11 @@ let abi = [
 let address = "0x0000000000000000000000000000000000000801";
 
 // env test for reward
-describe("Staking precompile", () => {
+describe("Staking precompile reward", () => {
   before(async () => {
     await usingApi(async (api) => {
       tk = getTestKeys();
       ed = await getExistentialDeposit(api);
-
       // Alice funds herself with 1M TAO
       const txSudoSetBalance = api.tx.sudo.sudo(
         api.tx.balances.forceSetBalance(
@@ -124,9 +123,11 @@ describe("Staking precompile", () => {
 
       // register network 1  via alice account
       // add_network(netuid, subnet_tempo, 0);
-      const registerNetwork = api.tx.subtensorModule.registerNetwork();
+      const registerNetwork = api.tx.subtensorModule.registerNetwork(
+        tk.alice.address,
+        1
+      );
       await sendTransaction(api, registerNetwork, tk.alice);
-
       // set tempo for both subnet 0 and root net
       const txSudoSetTemp = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetTempo(root_id, root_tempo)
@@ -137,21 +138,18 @@ describe("Staking precompile", () => {
         api.tx.adminUtils.sudoSetTempo(netuid, subnet_tempo)
       );
       await sendTransaction(api, txSudoSetTemp2, tk.alice);
-
       // register to network bob as validator
       const registerValidator = api.tx.subtensorModule.burnedRegister(
         netuid,
         tk.bob.address
       );
       await sendTransaction(api, registerValidator, tk.alice);
-
       // register to network charlie as miner
       const registerMiner = api.tx.subtensorModule.burnedRegister(
         netuid,
         tk.charlie.address
       );
       await sendTransaction(api, registerMiner, tk.alice);
-
       // sudo_set_hotkey_emission_tempo
 
       // sudo_set_hotkey_emission_tempo
@@ -165,13 +163,11 @@ describe("Staking precompile", () => {
         api.tx.adminUtils.sudoSetWeightsSetRateLimit(netuid, 0)
       );
       await sendTransaction(api, txSudoSetWeightSetRateLimit, tk.alice);
-
       // set subnet 1, limit 2
       const txSudoSetMaxAllowedValidators = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetMaxAllowedValidators(netuid, 2)
       );
       await sendTransaction(api, txSudoSetMaxAllowedValidators, tk.alice);
-
       const lastHeader = await api.rpc.chain.getHeader();
       // const blockNumber = await api.rpc.chain.blockNumber();
       const lastBlockNumber = lastHeader.toHuman().number;
@@ -185,52 +181,45 @@ describe("Staking precompile", () => {
 
         // sleep 0.1 sec, each block in 0.25 sec
         await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-
-      // pallet_subtensor::SubnetOwnerCut::<Test>::set(0);
+      }      // pallet_subtensor::SubnetOwnerCut::<Test>::set(0);
       const txSudoSetSubnetOwnerCut = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetSubnetOwnerCut(0)
       );
       await sendTransaction(api, txSudoSetSubnetOwnerCut, tk.alice);
-
       // pallet_subtensor::ActivityCutoff::<Test>::set(netuid, u16::MAX);
       const txSudoSetActivityCutoff = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetActivityCutoff(netuid, 65535)
       );
       await sendTransaction(api, txSudoSetActivityCutoff, tk.alice);
-
       // pallet_subtensor::MaxAllowedUids::<Test>::set(netuid, 2);
       const txSudoSetMaxAllowedUids = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetMaxAllowedUids(netuid, 65535)
       );
       await sendTransaction(api, txSudoSetMaxAllowedUids, tk.alice);
-
       // pallet_subtensor::MaxAllowedValidators::<Test>::set(netuid, 1);
       const txSudoSetMaxAllowedValidators2 = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetMaxAllowedValidators(netuid, 65535)
       );
       await sendTransaction(api, txSudoSetMaxAllowedValidators2, tk.alice);
-
       // SubtensorModule::set_min_delegate_take(0);
       const txSudoSetMinDelegateTake = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetMinDelegateTake(0)
       );
       await sendTransaction(api, txSudoSetMinDelegateTake, tk.alice);
-
       // Set zero hotkey take for validator. can't do it via extrinsic, so set its as default value
       const txBecomeDelegate = api.tx.subtensorModule.becomeDelegate(
         tk.bob.address
       );
       await sendTransaction(api, txBecomeDelegate, tk.alice);
-
       // Set zero hotkey take for miner
       const txBecomeDelegate2 = api.tx.subtensorModule.becomeDelegate(
         tk.charlie.address
       );
       await sendTransaction(api, txBecomeDelegate2, tk.alice);
 
-      const txSudoSetWeightsSetRateLimit =
-        api.tx.adminUtils.sudoSetWeightsSetRateLimit(netuid, 0);
+      const txSudoSetWeightsSetRateLimit = api.tx.sudo.sudo(
+        api.tx.adminUtils.sudoSetWeightsSetRateLimit(netuid, 0)
+      );
       await sendTransaction(api, txSudoSetWeightsSetRateLimit, tk.alice);
 
       const txSudoSetRootWeightsSetRateLimit = api.tx.sudo.sudo(
@@ -254,18 +243,21 @@ describe("Staking precompile", () => {
       //   Give 100% of parent stake to childkey
       const txValidatorStake = api.tx.subtensorModule.addStake(
         tk.bob.address,
+        netuid,
         stake
       );
       await sendTransaction(api, txValidatorStake, tk.alice);
 
       const txMinerStake = api.tx.subtensorModule.addStake(
         tk.charlie.address,
+        netuid,
         miner_stake
       );
       await sendTransaction(api, txMinerStake, tk.alice);
 
       const txMonimatorrStake = api.tx.subtensorModule.addStake(
         tk.charlie.address,
+        netuid,
         stake
       );
       await sendTransaction(api, txMonimatorrStake, tk.dave);
@@ -303,6 +295,8 @@ describe("Staking precompile", () => {
       );
       await sendTransaction(api, txSetRootWeights, tk.alice);
 
+     const initMinerPendingEmission = await api.query.subtensorModule.pendingHotkeyEmissionOnNetuid(tk.charlie.address, netuid);
+
       while (true) {
         const pending = await api.query.subtensorModule.pendingEmission(netuid);
         if (pending > 0) {
@@ -314,13 +308,9 @@ describe("Staking precompile", () => {
       }
 
       while (true) {
-        let miner_current_stake = await api.query.subtensorModule.stake(
-          tk.charlie.address,
-          tk.alice.address
-        );
-        // console.log("compare two: ", current, miner_stake_before_emission);
+        const currentMinerPendingEmission = await api.query.subtensorModule.pendingHotkeyEmissionOnNetuid(tk.charlie.address, netuid);
 
-        if (miner_current_stake > miner_stake_before_emission) {
+        if (currentMinerPendingEmission > initMinerPendingEmission) {
           console.log("miner got reward");
           break;
         }

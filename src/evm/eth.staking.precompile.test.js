@@ -234,7 +234,7 @@ describe("Staking precompile", () => {
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
       const netuid = 1;
 
-      const amountEth = 0.5;
+      const amountEth = 0.1;
       const amountStr = convertEtherToWei(amountEth).toString();
 
       const contract = new ethers.Contract(address, abi, signer);
@@ -248,7 +248,7 @@ describe("Staking precompile", () => {
         tk.zari.publicKey,
         amountStr,
         netuid,
-        { value: amountStr }
+        { value: "0" }
       );
       await tx.wait();
 
