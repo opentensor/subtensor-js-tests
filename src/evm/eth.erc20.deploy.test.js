@@ -413,6 +413,34 @@ describe("Smart contract deployment", () => {
 
       const contractFactory = new ethers.ContractFactory(abi, byteCode, signer);
 
+      const contract = await contractFactory.deploy();
+      await contract.waitForDeployment();
+
+      // Assert that the contract is deployed
+      expect(contract.target).to.not.be.undefined;
+
+      // Assert that contract bytecode exists (it will be different from what we set)
+      const deployedByteCode = await provider.getCode(contract.target);
+      expect(deployedByteCode).to.not.be.undefined;
+      expect(deployedByteCode.length).to.be.greaterThan(100);
+      expect(deployedByteCode).to.contain("0x60806040523480156");
+    });
+  });
+
+  it("Can deploy a smart contract with gas limit", async () => {
+    await usingEthApi(async (provider) => {
+      const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+      await usingApi(async (api) => {
+        // Alice gives permission to signer to create a contract
+        const txSudoSetWhitelist = api.tx.sudo.sudo(
+          api.tx.evm.setWhitelist([signer.address])
+        );
+
+        await sendTransaction(api, txSudoSetWhitelist, tk.alice);
+      });
+
+      const contractFactory = new ethers.ContractFactory(abi, byteCode, signer);
+
       const successful_gas_limit = "12345678";
       const contract = await contractFactory.deploy({
         gasLimit: successful_gas_limit,
