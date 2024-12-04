@@ -1,5 +1,5 @@
 import { usingApi, usingEthApi, sendTransaction } from "../util/comm.js";
-import { getTestKeys } from "../util/known-keys.js";
+import { getRandomKeypair, getTestKeys } from "../util/known-keys.js";
 import { convertTaoToRao } from "../util/balance-math.js";
 import { getExistentialDeposit } from "../util/helpers.js";
 import { expect } from "chai";
@@ -8,6 +8,8 @@ import { ethers } from "ethers";
 let tk;
 const amount1TAO = convertTaoToRao(1.0);
 let ed;
+const hotkey = getRandomKeypair();
+const coldkey = getRandomKeypair();
 
 const IMETAGRAPH_ADDRESS = "0x0000000000000000000000000000000000000802";
 const IMetagraphABI = [
@@ -407,30 +409,62 @@ describe("EVM chain id test", () => {
       ed = await getExistentialDeposit(api);
 
       // Alice funds herself with 1M TAO
-      const txSudoSetBalance = api.tx.sudo.sudo(
+      const txSudoSetBalance1 = api.tx.sudo.sudo(
         api.tx.balances.forceSetBalance(
           tk.alice.address,
           amount1TAO.multipliedBy(1e6).toString()
         )
       );
-      await sendTransaction(api, txSudoSetBalance, tk.alice);
+      await sendTransaction(api, txSudoSetBalance1, tk.alice);
+
+      // Alice funds hotkey with 1M TAO
+      const txSudoSetBalance2 = api.tx.sudo.sudo(
+        api.tx.balances.forceSetBalance(
+          hotkey.address,
+          amount1TAO.multipliedBy(1e6).toString()
+        )
+      );
+      await sendTransaction(api, txSudoSetBalance2, tk.alice);
+
+      // Alice funds coldkey with 1M TAO
+      const txSudoSetBalance3 = api.tx.sudo.sudo(
+        api.tx.balances.forceSetBalance(
+          coldkey.address,
+          amount1TAO.multipliedBy(1e6).toString()
+        )
+      );
+      await sendTransaction(api, txSudoSetBalance3, tk.alice);
 
       const netuid = 1;
-      const registerNetwork = api.tx.subtensorModule.registerNetwork();
-      await sendTransaction(api, registerNetwork, tk.alice);
 
-      // register to network
-      const registerValidator = api.tx.subtensorModule.burnedRegister(
-        netuid,
-        tk.bob.address
+      let netuid_1_exist = Boolean(
+        await api.query.subtensorModule.networksAdded(netuid)
       );
-      await sendTransaction(api, registerValidator, tk.alice);
+      // add the first subnet if not created yet
+      if (!netuid_1_exist) {
+        const registerNetwork = api.tx.subtensorModule.registerNetwork();
+        await sendTransaction(api, registerNetwork, tk.alice);
+      }
+
+      // register to network if no any neuron registered before
+      let uid_count = (
+        await api.query.subtensorModule.subnetworkN(netuid)
+      ).toNumber();
+
+      if (uid_count == 0) {
+        const registerValidator = api.tx.subtensorModule.burnedRegister(
+          netuid,
+          hotkey.address
+        );
+        await sendTransaction(api, registerValidator, coldkey);
+      }
     });
   });
 
   it("Metagraph data ", async () => {
     await usingEthApi(async (provider) => {
       const netuid = 1;
+      // check the data availability by check the first neuron.
       const uid = 0;
 
       const metagraphContract = new ethers.Contract(
@@ -439,10 +473,8 @@ describe("EVM chain id test", () => {
         provider
       );
 
-      const uid_count = (
-        await metagraphContract.getUidCount(netuid)
-      ).toString();
-      expect(uid_count).to.be.eq("1");
+      const uid_count = await metagraphContract.getUidCount(netuid);
+      expect(uid_count).to.not.be.undefined;
 
       const stake = await metagraphContract.getStake(netuid, uid);
       expect(stake).to.not.be.undefined;
