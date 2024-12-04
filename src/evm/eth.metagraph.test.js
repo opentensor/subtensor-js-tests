@@ -402,7 +402,7 @@ const IMetagraphABI = [
   },
 ];
 
-describe("EVM chain id test", () => {
+describe("Neuron metagraph data test", () => {
   before(async () => {
     await usingApi(async (api) => {
       tk = getTestKeys();
@@ -437,9 +437,10 @@ describe("EVM chain id test", () => {
 
       const netuid = 1;
 
-      let netuid_1_exist = Boolean(
+      let netuid_1_exist = (
         await api.query.subtensorModule.networksAdded(netuid)
-      );
+      ).toHuman();
+
       // add the first subnet if not created yet
       if (!netuid_1_exist) {
         const registerNetwork = api.tx.subtensorModule.registerNetwork();
