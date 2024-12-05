@@ -359,6 +359,25 @@ const IMetagraphABI = [
         name: "netuid",
         type: "uint16",
       },
+    ],
+    name: "getIsSubnetRegistered",
+    outputs: [
+      {
+        internalType: "bool",
+        name: "",
+        type: "bool",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "uint16",
+        name: "netuid",
+        type: "uint16",
+      },
       {
         internalType: "uint16",
         name: "uid",
@@ -476,6 +495,11 @@ describe("Neuron metagraph data test", () => {
 
       const uid_count = await metagraphContract.getUidCount(netuid);
       expect(uid_count).to.not.be.undefined;
+
+      const is_registered = await metagraphContract.getIsSubnetRegistered(
+        netuid
+      );
+      expect(is_registered).to.not.be.undefined;
 
       const stake = await metagraphContract.getStake(netuid, uid);
       expect(stake).to.not.be.undefined;
