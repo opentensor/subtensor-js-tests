@@ -26,7 +26,7 @@ let abi = [
       },
       {
         internalType: "bytes",
-        name: "subnetContract",
+        name: "subnetContact",
         type: "bytes",
       },
     ],
@@ -42,10 +42,29 @@ let abi = [
     stateMutability: "payable",
     type: "function",
   },
+  {
+    inputs: [
+      {
+        internalType: "uint16",
+        name: "neruid",
+        type: "uint16",
+      },
+      {
+        internalType: "uint64",
+        name: "servingRateLimit",
+        type: "uint64",
+      },
+    ],
+    name: "setServingRateLimit",
+    outputs: [],
+    stateMutability: "payable",
+    type: "function",
+  },
 ];
 
 let address = "0x0000000000000000000000000000000000000803";
 let totalNetwork = 0;
+let newSubnetId = 0;
 
 describe("Subnet precompile test", () => {
   before(async () => {
@@ -81,6 +100,7 @@ describe("Subnet precompile test", () => {
           totalNetwork + 1
         );
       });
+      newSubnetId = totalNetwork + 1;
     });
   });
 
@@ -106,6 +126,32 @@ describe("Subnet precompile test", () => {
           totalNetwork + 1
         );
       });
+    });
+  });
+
+  it("Can set subnet parameter", async () => {
+    await usingEthApi(async (provider) => {
+      // Create a contract instances
+      const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+      const contract = new ethers.Contract(address, abi, signer);
+      const newServingRateLimit = 100;
+      const tx = await contract.setServingRateLimit(
+        newSubnetId,
+        newServingRateLimit
+      );
+      await tx.wait();
+
+      let expectedValue = 0;
+
+      await usingApi(async (api) => {
+        expectedValue = (
+          await api.query.subtensorModule.servingRateLimit(newSubnetId)
+        ).toHuman();
+      });
+
+      console.log(expectedValue);
+
+      expect(expectedValue).to.eq(newServingRateLimit);
     });
   });
 });
