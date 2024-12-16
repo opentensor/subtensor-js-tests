@@ -122,4 +122,64 @@ describe("Smart contract deployment", () => {
       expect(deployedByteCode).to.contain("0x60806040523480156");
     });
   });
+
+  it("Can deploy if whitelist check is disabled", async () => {
+    await usingEthApi(async (provider) => {
+      const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+      await usingApi(async (api) => {
+        // Alice sets empty white list
+        const txSudoSetWhitelist = api.tx.sudo.sudo(
+          api.tx.evm.setWhitelist([])
+        );
+        await sendTransaction(api, txSudoSetWhitelist, tk.alice);
+
+        // Alice disables whitelist check
+        const txSudoDisableWhitelist = api.tx.sudo.sudo(
+          api.tx.evm.disableWhitelist(true)
+        );
+        await sendTransaction(api, txSudoDisableWhitelist, tk.alice);
+      });
+
+      const contractFactory = new ethers.ContractFactory(abi, byteCode, signer);
+      const contract = await contractFactory.deploy();
+
+      await contract.waitForDeployment();
+
+      // Assert that the contract is deployed
+      expect(contract.target).to.not.be.undefined;
+
+      // Assert that contract bytecode exists (it will be different from what we set)
+      const deployedByteCode = await provider.getCode(contract.target);
+      expect(deployedByteCode).to.not.be.undefined;
+      expect(deployedByteCode.length).to.be.greaterThan(100);
+      expect(deployedByteCode).to.contain("0x60806040523480156");
+    });
+  });
+
+  it("Non-sudo cannot disable whitelist check", async () => {
+    await usingApi(async (api) => {
+      // Bob disables whitelist check
+      const txSudoDisableWhitelist = api.tx.sudo.sudo(
+        api.tx.evm.disableWhitelist(true)
+      );
+
+      await expect(
+        sendTransaction(api, txSudoDisableWhitelist, tk.bob)
+      ).to.be.rejectedWith("RequireSudo");
+    });
+  });
+
+  it.only("Non-sudo cannot set whitelist", async () => {
+    await usingApi(async (api) => {
+      // Bob sets whitelist
+      const txSudoSetWhitelist = api.tx.sudo.sudo(
+        api.tx.evm.setWhitelist([])
+      );
+
+      await expect(
+        sendTransaction(api, txSudoSetWhitelist, tk.bob)
+      ).to.be.rejectedWith("RequireSudo");
+    });
+  });
+
 });
