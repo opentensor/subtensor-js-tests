@@ -905,6 +905,11 @@ describe("Subnet precompile test", () => {
         expect(await api.query.subtensorModule.totalNetwork().toHuman).to.eq(
           totalNetwork + 1
         );
+        expect(
+          await api.query.subtensorModule
+            .subnetOwner(totalNetwork + 1)
+            .to.eq(convertH160ToSS58(fundedEthWallet.address))
+        );
       });
       newSubnetId = totalNetwork + 1;
     });
@@ -930,6 +935,11 @@ describe("Subnet precompile test", () => {
       usingApi(async (api) => {
         expect(await api.query.subtensorModule.totalNetwork().toHuman).to.eq(
           totalNetwork + 1
+        );
+        expect(
+          await api.query.subtensorModule
+            .subnetOwner(totalNetwork + 1)
+            .to.eq(convertH160ToSS58(fundedEthWallet.address))
         );
       });
     });
