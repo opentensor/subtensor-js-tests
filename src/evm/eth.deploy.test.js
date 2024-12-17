@@ -169,17 +169,14 @@ describe("Smart contract deployment", () => {
     });
   });
 
-  it.only("Non-sudo cannot set whitelist", async () => {
+  it("Non-sudo cannot set whitelist", async () => {
     await usingApi(async (api) => {
       // Bob sets whitelist
-      const txSudoSetWhitelist = api.tx.sudo.sudo(
-        api.tx.evm.setWhitelist([])
-      );
+      const txSudoSetWhitelist = api.tx.sudo.sudo(api.tx.evm.setWhitelist([]));
 
       await expect(
         sendTransaction(api, txSudoSetWhitelist, tk.bob)
       ).to.be.rejectedWith("RequireSudo");
     });
   });
-
 });
