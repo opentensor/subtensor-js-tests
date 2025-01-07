@@ -1,5 +1,5 @@
 import { usingApi, usingEthApi, sendTransaction } from "../util/comm.js";
-import { getTestKeys } from "../util/known-keys.js";
+import { getRandomKeypair, getTestKeys } from "../util/known-keys.js";
 import {
   convertEtherToWei,
   convertWeiToEther,
@@ -25,40 +25,37 @@ const amount1ETH = convertEtherToWei(1.0);
 let fundedEthWallet = generateRandomAddress();
 let ed;
 
-let abi = [
+// coldkey
+const coldkey = getRandomKeypair();
+// validator
+const validator = getRandomKeypair();
+// miner
+const miner = getRandomKeypair();
+// nominator
+const nominator = getRandomKeypair();
+const sudo = getTestKeys().alice;
+
+const ISUBNETS_ADDRESS = "0x0000000000000000000000000000000000000804";
+const ISubnetsABI = [
   {
     inputs: [
+      {
+        internalType: "uint16",
+        name: "netuid",
+        type: "uint16",
+      },
       {
         internalType: "bytes32",
         name: "hotkey",
         type: "bytes32",
       },
     ],
-    name: "addStake",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "bytes32",
-        name: "hotkey",
-        type: "bytes32",
-      },
-      {
-        internalType: "uint256",
-        name: "amount",
-        type: "uint256",
-      },
-    ],
-    name: "removeStake",
+    name: "burnedRegister",
     outputs: [],
     stateMutability: "payable",
     type: "function",
   },
 ];
-let address = "0x0000000000000000000000000000000000000801";
 
 // env test for reward
 describe("Staking precompile", () => {
@@ -70,43 +67,36 @@ describe("Staking precompile", () => {
       // Alice funds herself with 1M TAO
       const txSudoSetBalance = api.tx.sudo.sudo(
         api.tx.balances.forceSetBalance(
-          tk.alice.address,
-          amount1TAO.multipliedBy(1e6).toString()
+          coldkey.address,
+          amount1TAO.multipliedBy(1e8).toString()
         )
       );
-      await sendTransaction(api, txSudoSetBalance, tk.alice);
+      await sendTransaction(api, txSudoSetBalance, sudo);
 
       const txSudoSetBalance2 = api.tx.sudo.sudo(
         api.tx.balances.forceSetBalance(
-          tk.bob.address,
-          amount1TAO.multipliedBy(1e6).toString()
+          validator.address,
+          amount1TAO.multipliedBy(1e8).toString()
         )
       );
-      await sendTransaction(api, txSudoSetBalance2, tk.alice);
+      await sendTransaction(api, txSudoSetBalance2, sudo);
 
       const txSudoSetBalance3 = api.tx.sudo.sudo(
         api.tx.balances.forceSetBalance(
-          tk.charlie.address,
-          amount1TAO.multipliedBy(1e6).toString()
+          miner.address,
+          amount1TAO.multipliedBy(1e8).toString()
         )
       );
-      await sendTransaction(api, txSudoSetBalance3, tk.alice);
+      await sendTransaction(api, txSudoSetBalance3, sudo);
 
-      // Alice funds fundedEthWallet
-      const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
-      console.log("fundedEthWallet ss58 address is: ", ss58mirror);
-
-      const transfer = api.tx.balances.transferKeepAlive(
-        ss58mirror,
-        amount1TAO.multipliedBy(100).toString()
+      const txSudoSetBalance4 = api.tx.sudo.sudo(
+        api.tx.balances.forceSetBalance(
+          nominator.address,
+          amount1TAO.multipliedBy(1e8).toString()
+        )
       );
-      await sendTransaction(api, transfer, tk.alice);
+      await sendTransaction(api, txSudoSetBalance4, sudo);
 
-      // -------- test_mining_emission_drain
-      // coldkey alice
-      // validator bob
-      // miner charlie
-      // nominator dave
       const netuid = 1;
       const root_id = 0;
       const root_tempo = 9; // neet root epoch to happen before subnet tempo
@@ -117,60 +107,60 @@ describe("Staking precompile", () => {
       const txSudoSetTxRateLimit = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetTxRateLimit(0)
       );
-      await sendTransaction(api, txSudoSetTxRateLimit, tk.alice);
+      await sendTransaction(api, txSudoSetTxRateLimit, sudo);
 
-      // add_network(root_id, root_tempo, 0);
-      // root network already in genesis
-
-      // register network 1  via alice account
-      // add_network(netuid, subnet_tempo, 0);
       const registerNetwork = api.tx.subtensorModule.registerNetwork();
-      await sendTransaction(api, registerNetwork, tk.alice);
+      await sendTransaction(api, registerNetwork, coldkey);
 
       // set tempo for both subnet 0 and root net
       const txSudoSetTemp = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetTempo(root_id, root_tempo)
       );
-      await sendTransaction(api, txSudoSetTemp, tk.alice);
+      await sendTransaction(api, txSudoSetTemp, sudo);
 
       const txSudoSetTemp2 = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetTempo(netuid, subnet_tempo)
       );
-      await sendTransaction(api, txSudoSetTemp2, tk.alice);
+      await sendTransaction(api, txSudoSetTemp2, sudo);
 
-      // register to network bob as validator
+      // register to network for validator
       const registerValidator = api.tx.subtensorModule.burnedRegister(
         netuid,
-        tk.bob.address
+        validator.address
       );
-      await sendTransaction(api, registerValidator, tk.alice);
+      await sendTransaction(api, registerValidator, coldkey);
 
-      // register to network charlie as miner
+      // register to network for miner
       const registerMiner = api.tx.subtensorModule.burnedRegister(
         netuid,
-        tk.charlie.address
+        miner.address
       );
-      await sendTransaction(api, registerMiner, tk.alice);
+      await sendTransaction(api, registerMiner, coldkey);
 
-      // sudo_set_hotkey_emission_tempo
+      // register to network for nominator
+      const registerNominator = api.tx.subtensorModule.burnedRegister(
+        netuid,
+        nominator.address
+      );
+      await sendTransaction(api, registerNominator, coldkey);
 
       // sudo_set_hotkey_emission_tempo
       const txSudoSetEmissionTemp = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetHotkeyEmissionTempo(hotkey_tempo)
       );
-      await sendTransaction(api, txSudoSetEmissionTemp, tk.alice);
+      await sendTransaction(api, txSudoSetEmissionTemp, sudo);
 
       // set subnet 1, limit 0
       const txSudoSetWeightSetRateLimit = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetWeightsSetRateLimit(netuid, 0)
       );
-      await sendTransaction(api, txSudoSetWeightSetRateLimit, tk.alice);
+      await sendTransaction(api, txSudoSetWeightSetRateLimit, sudo);
 
       // set subnet 1, limit 2
       const txSudoSetMaxAllowedValidators = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetMaxAllowedValidators(netuid, 2)
       );
-      await sendTransaction(api, txSudoSetMaxAllowedValidators, tk.alice);
+      await sendTransaction(api, txSudoSetMaxAllowedValidators, sudo);
 
       const lastHeader = await api.rpc.chain.getHeader();
       // const blockNumber = await api.rpc.chain.blockNumber();
@@ -191,52 +181,52 @@ describe("Staking precompile", () => {
       const txSudoSetSubnetOwnerCut = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetSubnetOwnerCut(0)
       );
-      await sendTransaction(api, txSudoSetSubnetOwnerCut, tk.alice);
+      await sendTransaction(api, txSudoSetSubnetOwnerCut, sudo);
 
       // pallet_subtensor::ActivityCutoff::<Test>::set(netuid, u16::MAX);
       const txSudoSetActivityCutoff = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetActivityCutoff(netuid, 65535)
       );
-      await sendTransaction(api, txSudoSetActivityCutoff, tk.alice);
+      await sendTransaction(api, txSudoSetActivityCutoff, sudo);
 
       // pallet_subtensor::MaxAllowedUids::<Test>::set(netuid, 2);
       const txSudoSetMaxAllowedUids = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetMaxAllowedUids(netuid, 65535)
       );
-      await sendTransaction(api, txSudoSetMaxAllowedUids, tk.alice);
+      await sendTransaction(api, txSudoSetMaxAllowedUids, sudo);
 
       // pallet_subtensor::MaxAllowedValidators::<Test>::set(netuid, 1);
       const txSudoSetMaxAllowedValidators2 = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetMaxAllowedValidators(netuid, 65535)
       );
-      await sendTransaction(api, txSudoSetMaxAllowedValidators2, tk.alice);
+      await sendTransaction(api, txSudoSetMaxAllowedValidators2, sudo);
 
       // SubtensorModule::set_min_delegate_take(0);
       const txSudoSetMinDelegateTake = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetMinDelegateTake(0)
       );
-      await sendTransaction(api, txSudoSetMinDelegateTake, tk.alice);
+      await sendTransaction(api, txSudoSetMinDelegateTake, sudo);
 
       // Set zero hotkey take for validator. can't do it via extrinsic, so set its as default value
       const txBecomeDelegate = api.tx.subtensorModule.becomeDelegate(
-        tk.bob.address
+        validator.address
       );
-      await sendTransaction(api, txBecomeDelegate, tk.alice);
+      await sendTransaction(api, txBecomeDelegate, coldkey);
 
       // Set zero hotkey take for miner
       const txBecomeDelegate2 = api.tx.subtensorModule.becomeDelegate(
-        tk.charlie.address
+        miner.address
       );
-      await sendTransaction(api, txBecomeDelegate2, tk.alice);
+      await sendTransaction(api, txBecomeDelegate2, coldkey);
 
       const txSudoSetWeightsSetRateLimit =
         api.tx.adminUtils.sudoSetWeightsSetRateLimit(netuid, 0);
-      await sendTransaction(api, txSudoSetWeightsSetRateLimit, tk.alice);
+      await sendTransaction(api, txSudoSetWeightsSetRateLimit, coldkey);
 
       const txSudoSetRootWeightsSetRateLimit = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetWeightsSetRateLimit(root_id, 0)
       );
-      await sendTransaction(api, txSudoSetRootWeightsSetRateLimit, tk.alice);
+      await sendTransaction(api, txSudoSetRootWeightsSetRateLimit, sudo);
     });
   });
 
@@ -253,26 +243,26 @@ describe("Staking precompile", () => {
       //   Stake from nominator to miner
       //   Give 100% of parent stake to childkey
       const txValidatorStake = api.tx.subtensorModule.addStake(
-        tk.bob.address,
+        validator.address,
         stake
       );
-      await sendTransaction(api, txValidatorStake, tk.alice);
+      await sendTransaction(api, txValidatorStake, coldkey);
 
       const txMinerStake = api.tx.subtensorModule.addStake(
-        tk.charlie.address,
+        miner.address,
         miner_stake
       );
-      await sendTransaction(api, txMinerStake, tk.alice);
+      await sendTransaction(api, txMinerStake, coldkey);
 
       const txMonimatorrStake = api.tx.subtensorModule.addStake(
-        tk.charlie.address,
+        nominator.address,
         stake
       );
-      await sendTransaction(api, txMonimatorrStake, tk.dave);
+      await sendTransaction(api, txMonimatorrStake, coldkey);
 
       const miner_stake_before_emission = await api.query.subtensorModule.stake(
-        tk.charlie.address,
-        tk.alice.address
+        miner.address,
+        coldkey.address
       );
 
       // Setup YUMA so that it creates emissions:
@@ -283,25 +273,25 @@ describe("Staking precompile", () => {
 
       const txSetWeights = api.tx.subtensorModule.setWeights(
         netuid,
-        [0, 1],
+        [0, 2],
         [0xffff, 0xffff],
         0
       );
-      await sendTransaction(api, txSetWeights, tk.bob);
+      await sendTransaction(api, txSetWeights, validator);
 
       const txRootRegister = api.tx.subtensorModule.rootRegister(
-        tk.bob.address
+        validator.address
       );
-      await sendTransaction(api, txRootRegister, tk.alice);
+      await sendTransaction(api, txRootRegister, coldkey);
 
       const txSetRootWeights = api.tx.subtensorModule.setRootWeights(
         root_id,
-        tk.bob.address,
+        validator.address,
         [0, 1],
         [0xffff, 0xffff],
         0
       );
-      await sendTransaction(api, txSetRootWeights, tk.alice);
+      await sendTransaction(api, txSetRootWeights, coldkey);
 
       while (true) {
         const pending = await api.query.subtensorModule.pendingEmission(netuid);
@@ -311,14 +301,14 @@ describe("Staking precompile", () => {
         }
 
         await new Promise((resolve) => setTimeout(resolve, 1000));
+        console.log("wait for the pendingEmission update");
       }
 
       while (true) {
         let miner_current_stake = await api.query.subtensorModule.stake(
-          tk.charlie.address,
-          tk.alice.address
+          miner.address,
+          coldkey.address
         );
-        // console.log("compare two: ", current, miner_stake_before_emission);
 
         if (miner_current_stake > miner_stake_before_emission) {
           console.log("miner got reward");
