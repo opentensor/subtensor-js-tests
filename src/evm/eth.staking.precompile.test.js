@@ -6,12 +6,15 @@ import {
   generateRandomAddress,
   convertH160ToPublicKey,
 } from "../util/address.js";
-import { getExistentialDeposit, getTaoBalance } from "../util/helpers.js";
+import { getExistentialDeposit, getTaoBalance, u256toBigNumber } from "../util/helpers.js";
 import { assert, ethers } from "ethers";
 import BigNumber from "bignumber.js";
-import { expect } from "chai";
+import { expect, use as chaiUse } from "chai";
 import exp from "constants";
 import { getRandomKeypair } from "../util/known-keys.js";
+import chaiBigNumber from "chai-bignumber";
+
+chaiUse(chaiBigNumber());
 
 let tk;
 const amount1TAO = convertTaoToRao(1.0);
@@ -20,22 +23,22 @@ let ed;
 
 let abi = [
   {
-    inputs: [
+    "inputs": [
       {
-        internalType: "bytes32",
-        name: "hotkey",
-        type: "bytes32",
+        "internalType": "bytes32",
+        "name": "hotkey",
+        "type": "bytes32"
       },
       {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
+        "internalType": "uint256",
+        "name": "netuid",
+        "type": "uint256"
+      }
     ],
-    name: "addStake",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
+    "name": "addStake",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
   },
   {
     inputs: [
@@ -62,33 +65,34 @@ let abi = [
     type: "function",
   },
   {
-    inputs: [
+    "inputs": [
       {
-        internalType: "bytes32",
-        name: "hotkey",
-        type: "bytes32",
+        "internalType": "bytes32",
+        "name": "hotkey",
+        "type": "bytes32"
       },
       {
-        internalType: "uint256",
-        name: "amount",
-        type: "uint256",
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
       },
       {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
+        "internalType": "uint256",
+        "name": "netuid",
+        "type": "uint256"
+      }
     ],
-    name: "removeStake",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
+    "name": "removeStake",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  }
 ];
 
 let address = "0x0000000000000000000000000000000000000801";
-const amountEth = 0.5;
-const amountStr = convertEtherToWei(amountEth).toString();
+// const amountEth = 0.5;
+// const amountStr = convertEtherToWei(amountEth).toString();
+const amountStr = "512000000000";
 let coldkey = getRandomKeypair();
 let hotkey = getRandomKeypair();
 
@@ -136,11 +140,6 @@ describe("Staking precompile", () => {
         amount1TAO.multipliedBy(100).toString()
       );
       await sendTransaction(api, transfer, tk.alice);
-
-      const txSudoSetTargetStakesPerInterval = api.tx.sudo.sudo(
-        api.tx.adminUtils.sudoSetTargetStakesPerInterval(10)
-      );
-      await sendTransaction(api, txSudoSetTargetStakesPerInterval, tk.alice);
     });
   });
 
@@ -169,10 +168,11 @@ describe("Staking precompile", () => {
       );
       await sendTransaction(api, swapCold, tk.alice);
 
-      let before_stake = await api.query.subtensorModule.stake(
+      let before_stake = u256toBigNumber(await api.query.subtensorModule.alpha(
         hotkey.address,
-        ss58mirror
-      );
+        ss58mirror,
+        netuid,
+      ));
 
       // wait for coldkey swap done
       while (true) {
@@ -193,7 +193,6 @@ describe("Staking precompile", () => {
       await usingEthApi(async (provider) => {
         // Create a contract instances
         const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-        const publicKey = convertH160ToPublicKey(fundedEthWallet.address);
         const contract = new ethers.Contract(address, abi, signer);
 
         // Execute transaction
@@ -203,12 +202,13 @@ describe("Staking precompile", () => {
         await tx.wait();
       });
 
-      let stake = await api.query.subtensorModule.stake(
+      let stake = u256toBigNumber(await api.query.subtensorModule.alpha(
         hotkey.address,
-        ss58mirror
-      );
+        ss58mirror,
+        netuid,
+      ));
 
-      expect(stake > before_stake);
+      expect(stake).to.be.bignumber.gt(before_stake);
     });
   });
 
