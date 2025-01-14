@@ -123,14 +123,12 @@ describe("Staking precompile", () => {
       );
       await sendTransaction(api, txSudoSetBalance, tk.alice);
 
-      // Alice funds coldkey with 1M TAO
-      const txSudoSetColdkeyBalance = api.tx.sudo.sudo(
-        api.tx.balances.forceSetBalance(
-          coldkey.address,
-          amount1TAO.multipliedBy(1e6).toString()
-        )
+      // Alice funds coldkey with 1K TAO
+      const fundColdkeyTx = api.tx.balances.transferKeepAlive(
+        coldkey.address,
+        amount1TAO.multipliedBy(1000).toString()
       );
-      await sendTransaction(api, txSudoSetColdkeyBalance, tk.alice);
+      await sendTransaction(api, fundColdkeyTx, tk.alice);
 
       // Alice funds fundedEthWallet
       const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
@@ -140,6 +138,10 @@ describe("Staking precompile", () => {
         amount1TAO.multipliedBy(100).toString()
       );
       await sendTransaction(api, transfer, tk.alice);
+
+      // register coldkey / hotkey
+      const register = api.tx.subtensorModule.burnedRegister(netuid, hotkey.address);
+      await sendTransaction(api, register, coldkey);
     });
   });
 
@@ -150,45 +152,14 @@ describe("Staking precompile", () => {
       const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
       const netuid = 1;
 
-      let balanceBefore;
+      let stakeBefore;
       await usingApi(async (api) => {
-        balanceBefore = await getTaoBalance(api, ss58mirror);
+        stakeBefore = u256toBigNumber(await api.query.subtensorModule.alpha(
+          hotkey.address,
+          ss58mirror,
+          netuid,
+        ));
       });
-
-      // register coldkey / hotkey
-      const register = api.tx.subtensorModule.rootRegister(hotkey.address);
-      await sendTransaction(api, register, coldkey);
-
-      let old_owner = (
-        await api.query.subtensorModule.owner(hotkey.address)
-      ).toString();
-
-      const swapCold = api.tx.sudo.sudo(
-        api.tx.subtensorModule.swapColdkey(coldkey.address, ss58mirror)
-      );
-      await sendTransaction(api, swapCold, tk.alice);
-
-      let before_stake = u256toBigNumber(await api.query.subtensorModule.alpha(
-        hotkey.address,
-        ss58mirror,
-        netuid,
-      ));
-
-      // wait for coldkey swap done
-      while (true) {
-        let current_owner = (
-          await api.query.subtensorModule.owner(hotkey.address)
-        ).toString();
-
-        if (current_owner !== old_owner) {
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        console.log(
-          "waiting for coldkey swap, please check coldkey swap duration in runtime if take a long time"
-        );
-      }
 
       await usingEthApi(async (provider) => {
         // Create a contract instances
@@ -202,13 +173,44 @@ describe("Staking precompile", () => {
         await tx.wait();
       });
 
-      let stake = u256toBigNumber(await api.query.subtensorModule.alpha(
-        hotkey.address,
-        ss58mirror,
-        netuid,
-      ));
+      await usingApi(async (api) => {
+        let stake = u256toBigNumber(await api.query.subtensorModule.alpha(
+          hotkey.address,
+          ss58mirror,
+          netuid,
+        ));
+        expect(stake).to.be.bignumber.gt(stakeBefore);
+      });
+    });
+  });
 
-      expect(stake).to.be.bignumber.gt(before_stake);
+  it("Can not add stake if subnet doesn't exist", async () => {
+    await usingEthApi(async (provider) => {
+      const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
+      const netuid = 1;
+      const badNetuid = 12345;
+
+      let stakeBefore;
+      await usingApi(async (api) => {
+        stakeBefore = u256toBigNumber(await api.query.subtensorModule.alpha(
+          hotkey.address,
+          ss58mirror,
+          netuid,
+        ));
+      });
+
+      await usingEthApi(async (provider) => {
+        // Create a contract instances
+        const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+        const contract = new ethers.Contract(address, abi, signer);
+
+        // Execute transaction
+        await expect(
+          contract.addStake(hotkey.publicKey, badNetuid, {
+            value: amountStr,
+          })
+        ).to.be.rejected;
+      });
     });
   });
 
