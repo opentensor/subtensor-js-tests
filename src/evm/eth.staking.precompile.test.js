@@ -6,15 +6,18 @@ import {
   generateRandomAddress,
   convertH160ToPublicKey,
 } from "../util/address.js";
-import { getExistentialDeposit, getTaoBalance } from "../util/helpers.js";
+import { u256toBigNumber } from "../util/helpers.js";
 import { ethers } from "ethers";
-import { expect } from "chai";
+import { expect, use as chaiUse } from "chai";
 import { getRandomKeypair } from "../util/known-keys.js";
+import chaiBigNumber from "chai-bignumber";
+import BigNumber from 'bignumber.js';
+
+chaiUse(chaiBigNumber());
 
 let tk;
 const amount1TAO = convertTaoToRao(1.0);
 let fundedEthWallet = generateRandomAddress();
-let ed;
 
 let abi = [
   {
@@ -33,14 +36,14 @@ let abi = [
   {
     inputs: [
       {
-        "internalType": "bytes32",
-        "name": "hotkey",
-        "type": "bytes32"
+        internalType: "bytes32",
+        name: "hotkey",
+        type: "bytes32"
       },
       {
-        "internalType": "uint16",
-        "name": "netuid",
-        "type": "uint16"
+        internalType: "uint256",
+        name: "netuid",
+        type: "uint256"
       }
     ],
     name: "addStake",
@@ -51,9 +54,9 @@ let abi = [
   {
     inputs: [
       {
-        "internalType": "bytes32",
-        "name": "delegate",
-        "type": "bytes32"
+        internalType: "bytes32",
+        name: "delegate",
+        type: "bytes32"
       }
     ],
     name: "removeProxy",
@@ -69,14 +72,43 @@ let abi = [
         type: "bytes32"
       },
       {
+        internalType: "bytes32",
+        name: "coldkey",
+        type: "bytes32"
+      },
+      {
+        internalType: "uint256",
+        name: "netuid",
+        type: "uint256"
+      }
+    ],
+    name: "getStake",
+    outputs: [
+      {
+        internalType: "uint256",
+        name: "",
+        type: "uint256"
+      }
+    ],
+    stateMutability: "view",
+    type: "function"
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "hotkey",
+        type: "bytes32"
+      },
+      {
         internalType: "uint256",
         name: "amount",
         type: "uint256"
       },
       {
-        internalType: "uint16",
+        internalType: "uint256",
         name: "netuid",
-        type: "uint16"
+        type: "uint256"
       }
     ],
     name: "removeStake",
@@ -92,11 +124,10 @@ const amountStr = convertEtherToWei(amountEth).toString();
 let coldkey = getRandomKeypair();
 let hotkey = getRandomKeypair();
 
-describe("Staking precompile", () => {
+describe.only("Staking precompile", () => {
   before(async () => {
     await usingApi(async (api) => {
       tk = getTestKeys();
-      ed = await getExistentialDeposit(api);
 
       const netuid = 1;
 
@@ -119,14 +150,12 @@ describe("Staking precompile", () => {
       );
       await sendTransaction(api, txSudoSetBalance, tk.alice);
 
-      // Alice funds coldkey with 1M TAO
-      const txSudoSetColdkeyBalance = api.tx.sudo.sudo(
-        api.tx.balances.forceSetBalance(
-          coldkey.address,
-          amount1TAO.multipliedBy(1e6).toString()
-        )
+      // Alice funds coldkey with 1K TAO
+      const fundColdkeyTx = api.tx.balances.transferKeepAlive(
+        coldkey.address,
+        amount1TAO.multipliedBy(1000).toString()
       );
-      await sendTransaction(api, txSudoSetColdkeyBalance, tk.alice);
+      await sendTransaction(api, fundColdkeyTx, tk.alice);
 
       // Alice funds fundedEthWallet
       const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
@@ -137,10 +166,9 @@ describe("Staking precompile", () => {
       );
       await sendTransaction(api, transfer, tk.alice);
 
-      const txSudoSetTargetStakesPerInterval = api.tx.sudo.sudo(
-        api.tx.adminUtils.sudoSetTargetStakesPerInterval(10)
-      );
-      await sendTransaction(api, txSudoSetTargetStakesPerInterval, tk.alice);
+      // register coldkey / hotkey
+      const register = api.tx.subtensorModule.burnedRegister(netuid, hotkey.address);
+      await sendTransaction(api, register, coldkey);
     });
   });
 
@@ -151,49 +179,18 @@ describe("Staking precompile", () => {
       const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
       const netuid = 1;
 
-      let balanceBefore;
+      let stakeBefore;
       await usingApi(async (api) => {
-        balanceBefore = await getTaoBalance(api, ss58mirror);
+        stakeBefore = u256toBigNumber(await api.query.subtensorModule.alpha(
+          hotkey.address,
+          ss58mirror,
+          netuid,
+        ));
       });
-
-      // register coldkey / hotkey
-      const register = api.tx.subtensorModule.rootRegister(hotkey.address);
-      await sendTransaction(api, register, coldkey);
-
-      let old_owner = (
-        await api.query.subtensorModule.owner(hotkey.address)
-      ).toString();
-
-      const swapCold = api.tx.sudo.sudo(
-        api.tx.subtensorModule.swapColdkey(coldkey.address, ss58mirror)
-      );
-      await sendTransaction(api, swapCold, tk.alice);
-
-      let before_stake = await api.query.subtensorModule.stake(
-        hotkey.address,
-        ss58mirror
-      );
-
-      // wait for coldkey swap done
-      while (true) {
-        let current_owner = (
-          await api.query.subtensorModule.owner(hotkey.address)
-        ).toString();
-
-        if (current_owner !== old_owner) {
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        console.log(
-          "waiting for coldkey swap, please check coldkey swap duration in runtime if take a long time"
-        );
-      }
 
       await usingEthApi(async (provider) => {
         // Create a contract instances
         const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-        const publicKey = convertH160ToPublicKey(fundedEthWallet.address);
         const contract = new ethers.Contract(address, abi, signer);
 
         // Execute transaction
@@ -203,60 +200,126 @@ describe("Staking precompile", () => {
         await tx.wait();
       });
 
-      let stake = await api.query.subtensorModule.stake(
-        hotkey.address,
-        ss58mirror
-      );
+      await usingApi(async (api) => {
+        let stake = u256toBigNumber(await api.query.subtensorModule.alpha(
+          hotkey.address,
+          ss58mirror,
+          netuid,
+        ));
+        expect(stake).to.be.bignumber.gt(stakeBefore);
+      });
+    });
+  });
 
-      expect(stake > before_stake);
+  it("Can not add stake if subnet doesn't exist", async () => {
+    await usingEthApi(async (provider) => {
+      const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
+      const netuid = 1;
+      const badNetuid = 12345;
+
+      let stakeBefore;
+      await usingApi(async (api) => {
+        stakeBefore = u256toBigNumber(await api.query.subtensorModule.alpha(
+          hotkey.address,
+          ss58mirror,
+          netuid,
+        ));
+      });
+
+      await usingEthApi(async (provider) => {
+        // Create a contract instances
+        const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+        const contract = new ethers.Contract(address, abi, signer);
+
+        // Execute transaction
+        await expect(
+          contract.addStake(hotkey.publicKey, badNetuid, {
+            value: amountStr,
+          })
+        ).to.be.rejected;
+      });
     });
   });
 
   it("Can get stake via contract read method", async () => {
-    await usingEthApi(async (provider) => {
-      // Create a contract instances
-      const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-      const publicKey = convertH160ToPublicKey(fundedEthWallet.address);
+    await usingApi(async (api) => {
+      await usingEthApi(async (provider) => {
+        // Create a contract instances
+        const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+        const coldPublicKey = convertH160ToPublicKey(fundedEthWallet.address);
+        const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
+        const netuid = 1;
 
-      const contract = new ethers.Contract(address, abi, signer);
+        const contract = new ethers.Contract(address, abi, signer);
 
-      // get stake via contract method
-      const stake_from_contract = await contract.getStake(
-        coldkey.publicKey,
-        publicKey
-      );
+        // Add stake
+        const txAdd = await contract.addStake(hotkey.publicKey, netuid, {
+          value: amountStr,
+        });
+        await txAdd.wait();
 
-      expect(amountStr == stake_from_contract.toString());
+        // Get Alpha via polkadot API
+        let alpha = u256toBigNumber(await api.query.subtensorModule.alpha(
+          hotkey.address,
+          ss58mirror,
+          netuid,
+        ));
+
+        // Adjust decimals
+        alpha = alpha.multipliedBy(1e9);
+
+        // get stake via contract method
+        const stake_from_contract = new BigNumber(await contract.getStake(
+          hotkey.publicKey,
+          coldPublicKey,
+          netuid,
+        ));
+
+        // Alpha shares should be numerically equal to stake since this is a simple case with no 
+        // unstaking, etc.
+        expect(alpha).to.be.bignumber.eq(stake_from_contract);
+      });
     });
   });
 
   it("Can remove stake", async () => {
-    await usingEthApi(async (provider) => {
-      // Use this example: https://github.com/gztensor/evm-demo/blob/main/docs/staking-precompile.md
-      const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
-      const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-      const netuid = 1;
+    await usingApi(async (api) => {
+      await usingEthApi(async (provider) => {
+        // Use this example: https://github.com/gztensor/evm-demo/blob/main/docs/staking-precompile.md
+        const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
+        const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+        const netuid = 1;
 
-      const contract = new ethers.Contract(address, abi, signer);
+        const contract = new ethers.Contract(address, abi, signer);
 
-      let before_stake = await api.query.subtensorModule.stake(
-        hotkey.address,
-        ss58mirror
-      );
+        // Add stake
+        const txAdd = await contract.addStake(hotkey.publicKey, netuid, {
+          value: amountStr,
+        });
+        await txAdd.wait();
 
-      const tx = await contract.removeStake(
-        hotkey.publicKey,
-        amountStr,
-        netuid,
-        { value: amountStr }
-      );
-      await tx.wait();
+        let stakeBefore = u256toBigNumber(await api.query.subtensorModule.alpha(
+          hotkey.address,
+          ss58mirror,
+          netuid,
+        ));
 
-      let stake = await api.query.subtensorModule.stake(
-        hotkey.address,
-        ss58mirror
-      );
-      expect(stake < before_stake);
+        // Remove all stake. stakeBefore is returned as Alpha using 10^9 decimals, so convert it first
+        const removeAmountStr = (new BigNumber(stakeBefore.toFixed())).multipliedBy(1e9).toFixed();
+        const tx = await contract.removeStake(
+          hotkey.publicKey,
+          removeAmountStr,
+          netuid,
+        );
+        await tx.wait();
+
+        let stake = u256toBigNumber(await api.query.subtensorModule.alpha(
+          hotkey.address,
+          ss58mirror,
+          netuid,
+        ));
+        expect(stake).to.be.bignumber.lt(stakeBefore);
+      });
     });
   });
 

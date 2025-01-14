@@ -1,3 +1,4 @@
+import BigNumber from "bignumber.js";
 import { getTestKeys } from './known-keys.js';
 import { sendTransaction, skipBlocks } from './comm.js';
 import { waitForStakeIncrease } from './waiters.js';
@@ -147,4 +148,36 @@ export async function getExistentialDeposit(api) {
 
   // Return the deposit as BigInt (Polkadot.js uses its own BN.js library which is similar to BigInt)
   return ed.toBigInt();
+}
+
+export function u256toBigNumber(u256) {
+  const hexString = u256.bits.toHex();
+  const cleanHexString = hexString.startsWith("0x") ? hexString.slice(2) : hexString;
+
+  // Convert the hex string to an array of bytes
+  const byteArray = [];
+
+  for (let i = 0; i < cleanHexString.length; i += 2) {
+    // Parse each pair of hex characters into a byte
+    byteArray.push(parseInt(cleanHexString.substr(i, 2), 16));
+  }
+
+  // Take chunks of 8 bytes each
+  let bigNumChunks = []; 
+  for (let i = 0; i < byteArray.length; i += 8) {
+    // Take a slice of up to 8 bytes at a time
+    const chunk = byteArray.slice(i, i + 8);
+    bigNumChunks.push(
+      new BigNumber("0x" + chunk.map(byte => byte.toString(16).padStart(2, '0')).join(''))
+    );
+  }
+
+  // Combine reversed chunks
+  bigNumChunks = bigNumChunks.reverse();
+  let combined = new BigNumber(0);
+  let base = new BigNumber("10000000000000000", 16); // 2^64
+  for (let i=0; i < bigNumChunks.length; i++) {
+    combined = combined.multipliedBy(base).plus(bigNumChunks[i]);
+  }
+  return combined;
 }
