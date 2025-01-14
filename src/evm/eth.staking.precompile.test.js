@@ -6,20 +6,18 @@ import {
   generateRandomAddress,
   convertH160ToPublicKey,
 } from "../util/address.js";
-import { getExistentialDeposit, getTaoBalance, u256toBigNumber } from "../util/helpers.js";
-import { assert, ethers } from "ethers";
-import BigNumber from "bignumber.js";
+import { u256toBigNumber } from "../util/helpers.js";
+import { ethers } from "ethers";
 import { expect, use as chaiUse } from "chai";
-import exp from "constants";
 import { getRandomKeypair } from "../util/known-keys.js";
 import chaiBigNumber from "chai-bignumber";
+import BigNumber from 'bignumber.js';
 
 chaiUse(chaiBigNumber());
 
 let tk;
 const amount1TAO = convertTaoToRao(1.0);
 let fundedEthWallet = generateRandomAddress();
-let ed;
 
 let abi = [
   {
@@ -84,15 +82,14 @@ let abi = [
     ],
     "name": "removeStake",
     "outputs": [],
-    "stateMutability": "payable",
+    "stateMutability": "nonpayable",
     "type": "function"
   }
 ];
 
 let address = "0x0000000000000000000000000000000000000801";
-// const amountEth = 0.5;
-// const amountStr = convertEtherToWei(amountEth).toString();
-const amountStr = "512000000000";
+const amountEth = 0.5;
+const amountStr = convertEtherToWei(amountEth).toString();
 let coldkey = getRandomKeypair();
 let hotkey = getRandomKeypair();
 
@@ -100,7 +97,6 @@ describe("Staking precompile", () => {
   before(async () => {
     await usingApi(async (api) => {
       tk = getTestKeys();
-      ed = await getExistentialDeposit(api);
 
       const netuid = 1;
 
@@ -233,32 +229,43 @@ describe("Staking precompile", () => {
   });
 
   it("Can remove stake", async () => {
-    await usingEthApi(async (provider) => {
-      // Use this example: https://github.com/gztensor/evm-demo/blob/main/docs/staking-precompile.md
-      const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
-      const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-      const netuid = 1;
+    await usingApi(async (api) => {
+      await usingEthApi(async (provider) => {
+        // Use this example: https://github.com/gztensor/evm-demo/blob/main/docs/staking-precompile.md
+        const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
+        const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+        const netuid = 1;
 
-      const contract = new ethers.Contract(address, abi, signer);
+        const contract = new ethers.Contract(address, abi, signer);
 
-      let before_stake = await api.query.subtensorModule.stake(
-        hotkey.address,
-        ss58mirror
-      );
+        // Add stake
+        const txAdd = await contract.addStake(hotkey.publicKey, netuid, {
+          value: amountStr,
+        });
+        await txAdd.wait();
 
-      const tx = await contract.removeStake(
-        hotkey.publicKey,
-        amountStr,
-        netuid,
-        { value: amountStr }
-      );
-      await tx.wait();
+        let stakeBefore = u256toBigNumber(await api.query.subtensorModule.alpha(
+          hotkey.address,
+          ss58mirror,
+          netuid,
+        ));
 
-      let stake = await api.query.subtensorModule.stake(
-        hotkey.address,
-        ss58mirror
-      );
-      expect(stake < before_stake);
+        // Remove all stake. stakeBefore is returned as Alpha using 10^9 decimals, so convert it first
+        const removeAmountStr = (new BigNumber(stakeBefore.toFixed())).multipliedBy(1e9).toFixed();
+        const tx = await contract.removeStake(
+          hotkey.publicKey,
+          removeAmountStr,
+          netuid,
+        );
+        await tx.wait();
+
+        let stake = u256toBigNumber(await api.query.subtensorModule.alpha(
+          hotkey.address,
+          ss58mirror,
+          netuid,
+        ));
+        expect(stake).to.be.bignumber.lt(stakeBefore);
+      });
     });
   });
 });
