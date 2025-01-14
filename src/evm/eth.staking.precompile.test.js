@@ -50,13 +50,18 @@ let abi = [
         name: "coldkey",
         type: "bytes32",
       },
+      {
+        "internalType": "uint256",
+        "name": "netuid",
+        "type": "uint256"
+      }
     ],
     name: "getStake",
     outputs: [
       {
-        internalType: "uint64",
+        internalType: "uint256",
         name: "",
-        type: "uint64",
+        type: "uint256",
       },
     ],
     stateMutability: "view",
@@ -93,7 +98,7 @@ const amountStr = convertEtherToWei(amountEth).toString();
 let coldkey = getRandomKeypair();
 let hotkey = getRandomKeypair();
 
-describe("Staking precompile", () => {
+describe.only("Staking precompile", () => {
   before(async () => {
     await usingApi(async (api) => {
       tk = getTestKeys();
@@ -211,20 +216,43 @@ describe("Staking precompile", () => {
   });
 
   it("Can get stake via contract read method", async () => {
-    await usingEthApi(async (provider) => {
-      // Create a contract instances
-      const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-      const publicKey = convertH160ToPublicKey(fundedEthWallet.address);
+    await usingApi(async (api) => {
+      await usingEthApi(async (provider) => {
+        // Create a contract instances
+        const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+        const coldPublicKey = convertH160ToPublicKey(fundedEthWallet.address);
+        const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
+        const netuid = 1;
 
-      const contract = new ethers.Contract(address, abi, signer);
+        const contract = new ethers.Contract(address, abi, signer);
 
-      // get stake via contract method
-      const stake_from_contract = await contract.getStake(
-        coldkey.publicKey,
-        publicKey
-      );
+        // Add stake
+        const txAdd = await contract.addStake(hotkey.publicKey, netuid, {
+          value: amountStr,
+        });
+        await txAdd.wait();
 
-      expect(amountStr == stake_from_contract.toString());
+        // Get Alpha via polkadot API
+        let alpha = u256toBigNumber(await api.query.subtensorModule.alpha(
+          hotkey.address,
+          ss58mirror,
+          netuid,
+        ));
+
+        // Adjust decimals
+        alpha = alpha.multipliedBy(1e9);
+
+        // get stake via contract method
+        const stake_from_contract = new BigNumber(await contract.getStake(
+          hotkey.publicKey,
+          coldPublicKey,
+          netuid,
+        ));
+
+        // Alpha shares should be numerically equal to stake since this is a simple case with no 
+        // unstaking, etc.
+        expect(alpha).to.be.bignumber.eq(stake_from_contract);
+      });
     });
   });
 
