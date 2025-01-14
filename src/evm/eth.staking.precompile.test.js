@@ -7,10 +7,8 @@ import {
   convertH160ToPublicKey,
 } from "../util/address.js";
 import { getExistentialDeposit, getTaoBalance } from "../util/helpers.js";
-import { assert, ethers } from "ethers";
-import BigNumber from "bignumber.js";
+import { ethers } from "ethers";
 import { expect } from "chai";
-import exp from "constants";
 import { getRandomKeypair } from "../util/known-keys.js";
 
 let tk;
@@ -23,67 +21,69 @@ let abi = [
     inputs: [
       {
         internalType: "bytes32",
-        name: "hotkey",
-        type: "bytes32",
+        name: "delegate",
+        type: "bytes32"
+      }
+    ],
+    name: "addProxy",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function"
+  },
+  {
+    inputs: [
+      {
+        "internalType": "bytes32",
+        "name": "hotkey",
+        "type": "bytes32"
       },
       {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
+        "internalType": "uint16",
+        "name": "netuid",
+        "type": "uint16"
+      }
     ],
     name: "addStake",
     outputs: [],
     stateMutability: "payable",
-    type: "function",
+    type: "function"
+  },
+  {
+    inputs: [
+      {
+        "internalType": "bytes32",
+        "name": "delegate",
+        "type": "bytes32"
+      }
+    ],
+    name: "removeProxy",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function"
   },
   {
     inputs: [
       {
         internalType: "bytes32",
         name: "hotkey",
-        type: "bytes32",
-      },
-      {
-        internalType: "bytes32",
-        name: "coldkey",
-        type: "bytes32",
-      },
-    ],
-    name: "getStake",
-    outputs: [
-      {
-        internalType: "uint64",
-        name: "",
-        type: "uint64",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "bytes32",
-        name: "hotkey",
-        type: "bytes32",
+        type: "bytes32"
       },
       {
         internalType: "uint256",
         name: "amount",
-        type: "uint256",
+        type: "uint256"
       },
       {
         internalType: "uint16",
         name: "netuid",
-        type: "uint16",
-      },
+        type: "uint16"
+      }
     ],
     name: "removeStake",
     outputs: [],
     stateMutability: "nonpayable",
-    type: "function",
-  },
+    type: "function"
+  }
 ];
 
 let address = "0x0000000000000000000000000000000000000801";
@@ -257,6 +257,40 @@ describe("Staking precompile", () => {
         ss58mirror
       );
       expect(stake < before_stake);
+    });
+  });
+
+  it("Can add/remove proxy", async () => {
+    await usingEthApi(async (provider) => {
+      // add/remove are done in a single test case, because we can't use the same private/public key
+      // between substrate and EVM, but to test the remove part, we must predefine the proxy first.
+      // it makes `remove` being dependent on `add`, because we should use `addProxy` from contract 
+      // to prepare the proxy for `removeProxy` testing - the proxy is specified for the 
+      // caller/origin.
+
+      // first, check we don't have proxies
+      const publicKey = convertH160ToPublicKey(fundedEthWallet.address);
+      let proxies = await api.query.proxy.proxies(publicKey);
+      expect(proxies[0].length).to.be.eq(0);
+
+      // intialize the contract
+      const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+      const contract = new ethers.Contract(address, abi, signer);
+
+      // test "add"
+      let tx = await contract.addProxy(tk.bob.publicKey);
+      await tx.wait();
+
+      const [[{ delegate }]] = await api.query.proxy.proxies(publicKey);
+
+      expect(delegate.toHuman()).to.be.eq(tk.bob.address);
+
+      // test "remove" 
+      tx = await contract.removeProxy(tk.bob.publicKey);
+      await tx.wait();
+
+      proxies = await api.query.proxy.proxies(publicKey);
+      expect(proxies[0].length).to.be.eq(0);
     });
   });
 });
