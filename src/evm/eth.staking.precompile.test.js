@@ -21,39 +21,65 @@ let fundedEthWallet = generateRandomAddress();
 
 let abi = [
   {
-    "inputs": [
+    inputs: [
       {
-        "internalType": "bytes32",
-        "name": "hotkey",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "uint256",
-        "name": "netuid",
-        "type": "uint256"
+        internalType: "bytes32",
+        name: "delegate",
+        type: "bytes32"
       }
     ],
-    "name": "addStake",
-    "outputs": [],
-    "stateMutability": "payable",
-    "type": "function"
+    name: "addProxy",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function"
   },
   {
     inputs: [
       {
         internalType: "bytes32",
         name: "hotkey",
-        type: "bytes32",
+        type: "bytes32"
+      },
+      {
+        internalType: "uint256",
+        name: "netuid",
+        type: "uint256"
+      }
+    ],
+    name: "addStake",
+    outputs: [],
+    stateMutability: "payable",
+    type: "function"
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "delegate",
+        type: "bytes32"
+      }
+    ],
+    name: "removeProxy",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function"
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "hotkey",
+        type: "bytes32"
       },
       {
         internalType: "bytes32",
         name: "coldkey",
-        type: "bytes32",
+        type: "bytes32"
       },
       {
-        "internalType": "uint256",
-        "name": "netuid",
-        "type": "uint256"
+        internalType: "uint256",
+        name: "netuid",
+        type: "uint256"
       }
     ],
     name: "getStake",
@@ -61,34 +87,34 @@ let abi = [
       {
         internalType: "uint256",
         name: "",
-        type: "uint256",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "hotkey",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "uint256",
-        "name": "amount",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "netuid",
-        "type": "uint256"
+        type: "uint256"
       }
     ],
-    "name": "removeStake",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    stateMutability: "view",
+    type: "function"
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "hotkey",
+        type: "bytes32"
+      },
+      {
+        internalType: "uint256",
+        name: "amount",
+        type: "uint256"
+      },
+      {
+        internalType: "uint256",
+        name: "netuid",
+        type: "uint256"
+      }
+    ],
+    name: "removeStake",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function"
   }
 ];
 
@@ -294,6 +320,40 @@ describe.only("Staking precompile", () => {
         ));
         expect(stake).to.be.bignumber.lt(stakeBefore);
       });
+    });
+  });
+
+  it("Can add/remove proxy", async () => {
+    await usingEthApi(async (provider) => {
+      // add/remove are done in a single test case, because we can't use the same private/public key
+      // between substrate and EVM, but to test the remove part, we must predefine the proxy first.
+      // it makes `remove` being dependent on `add`, because we should use `addProxy` from contract 
+      // to prepare the proxy for `removeProxy` testing - the proxy is specified for the 
+      // caller/origin.
+
+      // first, check we don't have proxies
+      const publicKey = convertH160ToPublicKey(fundedEthWallet.address);
+      let proxies = await api.query.proxy.proxies(publicKey);
+      expect(proxies[0].length).to.be.eq(0);
+
+      // intialize the contract
+      const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+      const contract = new ethers.Contract(address, abi, signer);
+
+      // test "add"
+      let tx = await contract.addProxy(tk.bob.publicKey);
+      await tx.wait();
+
+      const [[{ delegate }]] = await api.query.proxy.proxies(publicKey);
+
+      expect(delegate.toHuman()).to.be.eq(tk.bob.address);
+
+      // test "remove" 
+      tx = await contract.removeProxy(tk.bob.publicKey);
+      await tx.wait();
+
+      proxies = await api.query.proxy.proxies(publicKey);
+      expect(proxies[0].length).to.be.eq(0);
     });
   });
 });
