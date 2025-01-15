@@ -348,6 +348,39 @@ describe.only("Staking precompile", () => {
 
       expect(delegate.toHuman()).to.be.eq(tk.bob.address);
 
+      // check the delegate can stake
+      const netuid = 1;
+      const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
+
+      let stakeBefore;
+      await usingApi(async (api) => {
+        stakeBefore = u256toBigNumber(await api.query.subtensorModule.alpha(
+          hotkey.address,
+          ss58mirror,
+          netuid,
+        ));
+      });
+
+      const proxyCall = api.tx.proxy.proxy(
+        ss58mirror,
+        null,
+        api.tx.subtensorModule.addStake(
+          hotkey.address,
+          netuid,
+          amount1TAO.toString(),
+        )
+      );
+      await sendTransaction(api, proxyCall, tk.bob);
+
+      await usingApi(async (api) => {
+        let stake = u256toBigNumber(await api.query.subtensorModule.alpha(
+          hotkey.address,
+          ss58mirror,
+          netuid,
+        ));
+        expect(stake).to.be.bignumber.gt(stakeBefore);
+      });
+
       // test "remove" 
       tx = await contract.removeProxy(tk.bob.publicKey);
       await tx.wait();
