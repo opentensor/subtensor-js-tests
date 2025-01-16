@@ -176,7 +176,9 @@ describe("EVM neuron weights test", () => {
 
       // add the first subnet if not created yet
       if (!netuid_1_exist) {
-        const registerNetwork = api.tx.subtensorModule.registerNetwork();
+        const registerNetwork = api.tx.subtensorModule.registerNetwork(
+          tk.bob.address
+        );
         await sendTransaction(api, registerNetwork, tk.alice);
       }
 
