@@ -275,7 +275,7 @@ describe('Childkeys', () => {
     });
   });
 
-  it.only('Nominate to everyone', async () => {
+  it('Nominate to everyone', async () => {
     await usingCreatedApi(async api => {
       // Get the list of subnets
       let netuids = await getNetuids(api);

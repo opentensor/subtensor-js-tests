@@ -124,7 +124,7 @@ const amountStr = convertEtherToWei(amountEth).toString();
 let coldkey = getRandomKeypair();
 let hotkey = getRandomKeypair();
 
-describe.only("Staking precompile", () => {
+describe("Staking precompile", () => {
   before(async () => {
     await usingApi(async (api) => {
       tk = getTestKeys();

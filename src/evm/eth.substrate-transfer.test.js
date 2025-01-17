@@ -82,7 +82,7 @@ describe("Balance transfers between substrate and EVM", () => {
     // Verify that Eth balance is 10^18
     await usingEthApi(async (provider) => {
       const ethBalanceAfter = await getEthereumBalance(provider, h160address);
-      expect(ethBalanceAfter.toString()).to.be.equal(amount1ETH.toString());
+      expect(ethBalanceAfter).to.be.bignumber.equal(amount1ETH);
     });
   });
 
@@ -120,12 +120,12 @@ describe("Balance transfers between substrate and EVM", () => {
       const ed_eth = convertEtherToWei(convertRaoToTao(ed));
 
       expect(
-        ethBalanceBefore1.minus(ethBalanceAfter1).minus(txPrice).toString()
-      ).to.be.equal(amount.toString());
+        ethBalanceBefore1.minus(ethBalanceAfter1).minus(txPrice)
+      ).to.be.bignumber.equal(amount);
 
       expect(
-        ethBalanceAfter2.minus(ethBalanceBefore2).plus(ed_eth).toString()
-      ).to.be.equal(amount.toString());
+        ethBalanceAfter2.minus(ethBalanceBefore2).plus(ed_eth)
+      ).to.be.bignumber.equal(amount);
     });
   });
 
@@ -171,6 +171,11 @@ describe("Balance transfers between substrate and EVM", () => {
 
       // Execute transaction
       const tx = await contract.transfer(alicePubKey, { value: amountStr });
+
+      // Get gas price and transfer cost
+      // const txPrice = await estimateTransactionCost(provider, tx);
+      // console.log(`txPrice = ${txPrice.toFixed()}`);
+
       await tx.wait();
     });
 
@@ -181,8 +186,8 @@ describe("Balance transfers between substrate and EVM", () => {
     });
 
     const amountSub = convertTaoToRao(amountEth);
-    expect(aliceBalanceAfter.minus(aliceBalanceBefore).toString()).to.be.equal(
-      amountSub.toString()
+    expect(aliceBalanceAfter.minus(aliceBalanceBefore)).to.be.bignumber.equal(
+      amountSub
     );
   });
 
@@ -226,8 +231,7 @@ describe("Balance transfers between substrate and EVM", () => {
         aliceBalanceAfter
           .minus(aliceBalanceBefore)
           .plus(paymentInfo.partialFee)
-          .toString()
-      ).to.be.equal(amountSub.toString());
+      ).to.be.bignumber.equal(amountSub);
     });
   });
 
@@ -281,7 +285,7 @@ describe("Balance transfers between substrate and EVM", () => {
     });
 
     expect(
-      ethBalanceAfter.minus(ethBalanceBefore).plus(ed_eth).toString()
+      ethBalanceAfter.minus(ethBalanceBefore).plus(ed_eth).toFixed()
     ).to.be.equal(amount05Str);
   });
 
@@ -335,11 +339,11 @@ describe("Balance transfers between substrate and EVM", () => {
 
       const amount = convertEtherToWei(2.0);
 
-      const ethBalanceBefore = await getEthereumBalance(
-        provider,
-        contract.target
-      );
-      console.log("before is ", ethBalanceBefore);
+      // const ethBalanceBefore = await getEthereumBalance(
+      //   provider,
+      //   contract.target
+      // );
+      // console.log("before is ", ethBalanceBefore);
 
       // Send TAO
       const tx = {
@@ -349,22 +353,22 @@ describe("Balance transfers between substrate and EVM", () => {
 
       await sendEthTransaction(provider, fundedEthWallet, tx);
 
-      const ethBalanceAfter = await getEthereumBalance(
-        provider,
-        contract.target
-      );
-      console.log("after is ", ethBalanceAfter);
+      // const ethBalanceAfter = await getEthereumBalance(
+      //   provider,
+      //   contract.target
+      // );
+      // console.log("after is ", ethBalanceAfter);
 
       const withdrawTx = await contract.withdraw(
         convertEtherToWei(1.0).toString()
       );
       await withdrawTx.wait();
 
-      const ethBalanceFinal = await getEthereumBalance(
-        provider,
-        contract.target
-      );
-      console.log("final is ", ethBalanceFinal);
+      // const ethBalanceFinal = await getEthereumBalance(
+      //   provider,
+      //   contract.target
+      // );
+      // console.log("final is ", ethBalanceFinal);
     });
   });
 
@@ -439,8 +443,8 @@ describe("Balance transfers between substrate and EVM", () => {
       const ethBalanceAfter2 = await getEthereumBalance(provider, recipient2);
       const ed_eth = convertEtherToWei(convertRaoToTao(ed));
 
-      expect(ethBalanceAfter1.plus(ed_eth).toString()).to.be.equal(
-        amount.toString()
+      expect(ethBalanceAfter1.plus(ed_eth)).to.be.bignumber.equal(
+        amount
       );
 
       expect(ethBalanceAfter2.toString()).to.be.equal("0");
