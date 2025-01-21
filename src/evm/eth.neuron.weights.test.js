@@ -7,6 +7,7 @@ import {
   convertH160ToSS58,
   generateRandomAddress,
 } from "../util/address.js";
+import { INEURON_ADDRESS, INeuronABI } from "../util/precompile.js";
 import { TypeRegistry } from "@polkadot/types";
 import { Vec, Tuple, VecFixed, u16, u8, u64 } from "@polkadot/types-codec";
 import { blake2AsU8a } from "@polkadot/util-crypto";
@@ -46,89 +47,6 @@ function getCommitHash() {
   console.log(hash);
   return hash;
 }
-
-const INEURON_ADDRESS = "0x0000000000000000000000000000000000000805";
-const INeuronABI = [
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint256",
-        name: "commitHash",
-        type: "uint256",
-      },
-    ],
-    name: "commitWeights",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint16[]",
-        name: "uids",
-        type: "uint16[]",
-      },
-      {
-        internalType: "uint16[]",
-        name: "values",
-        type: "uint16[]",
-      },
-      {
-        internalType: "uint16[]",
-        name: "salt",
-        type: "uint16[]",
-      },
-      {
-        internalType: "uint64",
-        name: "versionKey",
-        type: "uint64",
-      },
-    ],
-    name: "revealWeights",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint16[]",
-        name: "dests",
-        type: "uint16[]",
-      },
-      {
-        internalType: "uint16[]",
-        name: "weights",
-        type: "uint16[]",
-      },
-      {
-        internalType: "uint64",
-        name: "versionKey",
-        type: "uint64",
-      },
-    ],
-    name: "setWeights",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-];
 
 describe("EVM neuron weights test", () => {
   before(async () => {
