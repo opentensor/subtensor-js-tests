@@ -14,6 +14,7 @@ import {
   ss58ToH160,
 } from "../util/eth-helpers.js";
 import { getExistentialDeposit, getTaoBalance } from "../util/helpers.js";
+import { ISUBNETS_ADDRESS, ISubnetsABI } from "../util/precompile.js";
 import { decodeAddress } from "@polkadot/util-crypto";
 import { assert, ethers } from "ethers";
 import BigNumber from "bignumber.js";
@@ -34,28 +35,6 @@ const miner = getRandomKeypair();
 // nominator
 const nominator = getRandomKeypair();
 const sudo = getTestKeys().alice;
-
-const ISUBNETS_ADDRESS = "0x0000000000000000000000000000000000000804";
-const ISubnetsABI = [
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "bytes32",
-        name: "hotkey",
-        type: "bytes32",
-      },
-    ],
-    name: "burnedRegister",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-];
 
 // env test for reward
 describe("Staking precompile", () => {
