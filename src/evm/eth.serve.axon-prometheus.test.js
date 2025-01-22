@@ -2,15 +2,20 @@ import { usingApi, usingEthApi, sendTransaction } from "../util/comm.js";
 import { getTestKeys, getRandomKeypair } from "../util/known-keys.js";
 import { convertTaoToRao } from "../util/balance-math.js";
 import { getExistentialDeposit } from "../util/helpers.js";
+import { convertH160ToSS58, generateRandomAddress } from "../util/address.js";
 import { expect } from "chai";
+import { ethers } from "ethers";
+import { INEURON_ADDRESS, INeuronABI } from "../util/precompile.js";
 
 let tk;
 const amount1TAO = convertTaoToRao(1.0);
 let ed;
 
 let coldkey = getRandomKeypair();
-let hotkey = getRandomKeypair();
-let hotkey2 = getRandomKeypair();
+let fundedEthWallet1 = generateRandomAddress();
+let fundedEthWallet2 = generateRandomAddress();
+let fundedEthWallet3 = generateRandomAddress();
+
 describe("Serve Axon Prometheus test", () => {
   before(async () => {
     await usingApi(async (api) => {
@@ -35,24 +40,32 @@ describe("Serve Axon Prometheus test", () => {
       );
       await sendTransaction(api, txSudoSetBalance2, tk.alice);
 
-      // Alice funds fundedEthWallet
-      //   const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
-
+      // Alice funds fundedEthWallet1
       const txSudoSetBalance3 = api.tx.sudo.sudo(
         api.tx.balances.forceSetBalance(
-          hotkey.address,
+          convertH160ToSS58(fundedEthWallet1.address),
           amount1TAO.multipliedBy(1e6).toString()
         )
       );
       await sendTransaction(api, txSudoSetBalance3, tk.alice);
 
+      // Alice funds fundedEthWallet2
       const txSudoSetBalance4 = api.tx.sudo.sudo(
         api.tx.balances.forceSetBalance(
-          hotkey2.address,
+          convertH160ToSS58(fundedEthWallet2.address),
           amount1TAO.multipliedBy(1e6).toString()
         )
       );
       await sendTransaction(api, txSudoSetBalance4, tk.alice);
+
+      // Alice funds fundedEthWallet3
+      const txSudoSetBalance5 = api.tx.sudo.sudo(
+        api.tx.balances.forceSetBalance(
+          convertH160ToSS58(fundedEthWallet3.address),
+          amount1TAO.multipliedBy(1e6).toString()
+        )
+      );
+      await sendTransaction(api, txSudoSetBalance5, tk.alice);
 
       const netuid = 1;
 
@@ -69,20 +82,26 @@ describe("Serve Axon Prometheus test", () => {
       // register coldkey / hotkey
       const register = api.tx.subtensorModule.burnedRegister(
         netuid,
-        hotkey.address
+        convertH160ToSS58(fundedEthWallet1.address)
       );
       await sendTransaction(api, register, coldkey);
 
       const register2 = api.tx.subtensorModule.burnedRegister(
         netuid,
-        hotkey2.address
+        convertH160ToSS58(fundedEthWallet2.address)
       );
       await sendTransaction(api, register2, coldkey);
+
+      const register3 = api.tx.subtensorModule.burnedRegister(
+        netuid,
+        convertH160ToSS58(fundedEthWallet3.address)
+      );
+      await sendTransaction(api, register3, coldkey);
     });
   });
 
   it("Serve Axon", async () => {
-    await usingApi(async (api) => {
+    await usingEthApi(async (provider) => {
       const netuid = 1;
       const version = 0;
       const ip = 1;
@@ -92,7 +111,10 @@ describe("Serve Axon Prometheus test", () => {
       const placeholder1 = 8;
       const placeholder2 = 0;
 
-      const txServeAxon = api.tx.subtensorModule.serveAxon(
+      const signer = new ethers.Wallet(fundedEthWallet1.privateKey, provider);
+      const contract = new ethers.Contract(INEURON_ADDRESS, INeuronABI, signer);
+
+      const tx = await contract.serveAxon(
         netuid,
         version,
         ip,
@@ -102,12 +124,12 @@ describe("Serve Axon Prometheus test", () => {
         placeholder1,
         placeholder2
       );
-      await sendTransaction(api, txServeAxon, hotkey);
+      await tx.wait();
     });
   });
 
   it("Serve Axon TLS", async () => {
-    await usingApi(async (api) => {
+    await usingEthApi(async (provider) => {
       const netuid = 1;
       const version = 0;
       const ip = 1;
@@ -118,7 +140,10 @@ describe("Serve Axon Prometheus test", () => {
       const placeholder2 = 0;
       const certificate = new Uint8Array(65);
 
-      const txServeAxon = api.tx.subtensorModule.serveAxonTls(
+      const signer = new ethers.Wallet(fundedEthWallet2.privateKey, provider);
+      const contract = new ethers.Contract(INEURON_ADDRESS, INeuronABI, signer);
+
+      const tx = await contract.serveAxonTls(
         netuid,
         version,
         ip,
@@ -129,26 +154,29 @@ describe("Serve Axon Prometheus test", () => {
         placeholder2,
         certificate
       );
-      await sendTransaction(api, txServeAxon, hotkey2);
+      await tx.wait();
     });
   });
 
   it("Serve Prometheus", async () => {
-    await usingApi(async (api) => {
+    await usingEthApi(async (provider) => {
       const netuid = 1234;
       const version = 0;
       const ip = 1;
       const port = 2;
       const ipType = 4;
 
-      const txServeAxon = api.tx.subtensorModule.servePrometheus(
+      const signer = new ethers.Wallet(fundedEthWallet2.privateKey, provider);
+      const contract = new ethers.Contract(INEURON_ADDRESS, INeuronABI, signer);
+
+      const tx = await contract.servePrometheus(
         netuid,
         version,
         ip,
         port,
         ipType
       );
-      await sendTransaction(api, txServeAxon, hotkey);
+      await tx.wait();
     });
   });
 });
