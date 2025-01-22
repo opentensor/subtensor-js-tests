@@ -362,6 +362,11 @@ let abi = [
   {
     inputs: [
       {
+        internalType: "bytes32",
+        name: "hotkey",
+        type: "bytes32",
+      },
+      {
         internalType: "bytes",
         name: "subnetName",
         type: "bytes",
@@ -383,7 +388,13 @@ let abi = [
     type: "function",
   },
   {
-    inputs: [],
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "hotkey",
+        type: "bytes32",
+      },
+    ],
     name: "registerNetwork",
     outputs: [],
     stateMutability: "payable",
@@ -897,8 +908,7 @@ describe("Subnet precompile test", () => {
       // Create a contract instances
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
       const contract = new ethers.Contract(address, abi, signer);
-
-      const tx = await contract.registerNetwork();
+      const tx = await contract.registerNetwork(tk.alice.publicKey);
       await tx.wait();
 
       usingApi(async (api) => {
@@ -929,7 +939,12 @@ describe("Subnet precompile test", () => {
       const name = ethers.toUtf8Bytes("name");
       const repo = ethers.toUtf8Bytes("repo");
       const contact = ethers.toUtf8Bytes("contact");
-      const tx = await contract.registerNetwork(name, repo, contact);
+      const tx = await contract.registerNetwork(
+        tk.alice.publicKey,
+        name,
+        repo,
+        contact
+      );
       await tx.wait();
 
       usingApi(async (api) => {

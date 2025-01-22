@@ -78,7 +78,7 @@ describe("Neuron burned register", () => {
 
       // add the first subnet if not created yet
       if (!netuid_1_exist) {
-        const registerNetwork = api.tx.subtensorModule.registerNetwork();
+        const registerNetwork = api.tx.subtensorModule.registerNetwork(tk.bob);
         await sendTransaction(api, registerNetwork, tk.alice);
       }
     });
@@ -95,6 +95,8 @@ describe("Neuron burned register", () => {
         const key = (
           await api.query.subtensorModule.keys(netuid, uid)
         ).toHuman();
+
+        console.log("uid and key before burned: ", uid, key);
       });
 
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
@@ -119,7 +121,20 @@ describe("Neuron burned register", () => {
           await api.query.subtensorModule.keys(netuid, uid)
         ).toString();
 
+        // check the neuron is registered.
         expect(key).to.eq(hotkey.address);
+
+        let i = 0;
+        while (i < 10) {
+          let emission = Number(
+            await api.query.subtensorModule.pendingdHotkeyEmission(
+              decodeAddress(hotkey.address)
+            )
+          );
+          console.log("emission is ", emission);
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          i += 1;
+        }
       });
     });
   });
