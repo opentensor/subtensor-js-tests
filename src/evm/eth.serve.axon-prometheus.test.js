@@ -125,6 +125,24 @@ describe("Serve Axon Prometheus test", () => {
         placeholder2
       );
       await tx.wait();
+
+      await usingApi(async (api) => {
+        const axon = (
+          await api.query.subtensorModule.axons(
+            netuid,
+            convertH160ToSS58(fundedEthWallet1.address)
+          )
+        ).toHuman();
+
+        expect(axon["block"]).to.not.be.undefined;
+        expect(version).to.eq(Number(axon["version"]));
+        expect(ip).to.eq(Number(axon["ip"]));
+        expect(port).to.eq(Number(axon["port"]));
+        expect(ipType).to.eq(Number(axon["ipType"]));
+        expect(protocol).to.eq(Number(axon["protocol"]));
+        expect(placeholder1).to.eq(Number(axon["placeholder1"]));
+        expect(placeholder2).to.eq(Number(axon["placeholder2"]));
+      });
     });
   });
 
@@ -161,18 +179,36 @@ describe("Serve Axon Prometheus test", () => {
         certificate
       );
       await tx.wait();
+
+      await usingApi(async (api) => {
+        const axon = (
+          await api.query.subtensorModule.axons(
+            netuid,
+            convertH160ToSS58(fundedEthWallet2.address)
+          )
+        ).toHuman();
+
+        expect(axon["block"]).to.not.be.undefined;
+        expect(version).to.eq(Number(axon["version"]));
+        expect(ip).to.eq(Number(axon["ip"]));
+        expect(port).to.eq(Number(axon["port"]));
+        expect(ipType).to.eq(Number(axon["ipType"]));
+        expect(protocol).to.eq(Number(axon["protocol"]));
+        expect(placeholder1).to.eq(Number(axon["placeholder1"]));
+        expect(placeholder2).to.eq(Number(axon["placeholder2"]));
+      });
     });
   });
 
   it("Serve Prometheus", async () => {
     await usingEthApi(async (provider) => {
-      const netuid = 1234;
+      const netuid = 1;
       const version = 0;
       const ip = 1;
       const port = 2;
       const ipType = 4;
 
-      const signer = new ethers.Wallet(fundedEthWallet2.privateKey, provider);
+      const signer = new ethers.Wallet(fundedEthWallet3.privateKey, provider);
       const contract = new ethers.Contract(INEURON_ADDRESS, INeuronABI, signer);
 
       const tx = await contract.servePrometheus(
@@ -183,6 +219,21 @@ describe("Serve Axon Prometheus test", () => {
         ipType
       );
       await tx.wait();
+
+      await usingApi(async (api) => {
+        const prometheus = (
+          await api.query.subtensorModule.prometheus(
+            netuid,
+            convertH160ToSS58(fundedEthWallet3.address)
+          )
+        ).toHuman();
+
+        expect(prometheus["block"]).to.not.be.undefined;
+        expect(version).to.eq(Number(prometheus["version"]));
+        expect(ip).to.eq(Number(prometheus["ip"]));
+        expect(port).to.eq(Number(prometheus["port"]));
+        expect(ipType).to.eq(Number(prometheus["ipType"]));
+      });
     });
   });
 });
