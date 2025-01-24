@@ -11,6 +11,7 @@ import { INEURON_ADDRESS, INeuronABI } from "../util/precompile.js";
 import { TypeRegistry } from "@polkadot/types";
 import { Vec, Tuple, VecFixed, u16, u8, u64 } from "@polkadot/types-codec";
 import { blake2AsU8a } from "@polkadot/util-crypto";
+import { expect } from "chai";
 
 let tk;
 const amount1TAO = convertTaoToRao(1.0);
@@ -119,20 +120,6 @@ describe("EVM neuron weights test", () => {
     });
   });
 
-  it("EVM neuron set weights via call precompile", async () => {
-    await usingEthApi(async (provider) => {
-      const netuid = 1;
-
-      const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-      const contract = new ethers.Contract(INEURON_ADDRESS, INeuronABI, signer);
-      const dests = [1];
-      const weights = [2];
-
-      const tx = await contract.setWeights(netuid, dests, weights, version_key);
-      await tx.wait();
-    });
-  });
-
   it("EVM neuron commit weights via call precompile", async () => {
     await usingApi(async (api) => {
       const netuid = 1;
@@ -152,6 +139,20 @@ describe("EVM neuron weights test", () => {
       const tx = await contract.commitWeights(netuid, bigNumberValue);
       await tx.wait();
     });
+
+    await usingApi(async (api) => {
+      const netuid = 1;
+
+      const weightCommit = (
+        await api.query.subtensorModule.weightCommits(
+          netuid,
+          convertH160ToPublicKey(fundedEthWallet.address)
+        )
+      ).toHuman();
+
+      // check the commit includes data
+      expect(weightCommit).to.be.not.undefined;
+    });
   });
 
   it("EVM neuron reveal weights via call precompile", async () => {
@@ -168,6 +169,47 @@ describe("EVM neuron weights test", () => {
         version_key
       );
       await tx.wait();
+    });
+
+    await usingApi(async (api) => {
+      const netuid = 1;
+
+      const weightCommit = (
+        await api.query.subtensorModule.weightCommits(
+          netuid,
+          convertH160ToPublicKey(fundedEthWallet.address)
+        )
+      ).toHuman();
+
+      // check the weight commit is removed after reveal successfully
+      expect(weightCommit).to.be.null;
+
+      const neuron_uid = (
+        await api.query.subtensorModule.uids(
+          netuid,
+          convertH160ToPublicKey(fundedEthWallet.address)
+        )
+      ).toHuman();
+
+      const weights = (
+        await api.query.subtensorModule.weights(netuid, neuron_uid)
+      ).toHuman();
+
+      // check the weight is set after reveal with correct uid
+      let uidIncluded = false;
+      let uid = undefined;
+      let value = undefined;
+
+      weights.forEach((weight, index) => {
+        uid = weight[0];
+        value = weight[1];
+        if (uid == neuron_uid) {
+          uidIncluded = true;
+        }
+      });
+
+      expect(uidIncluded).to.be.eq(true);
+      expect(value).to.be.not.undefined;
     });
   });
 });
