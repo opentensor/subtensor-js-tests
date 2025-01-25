@@ -100,6 +100,44 @@ export const IStakingABI = [
     stateMutability: "nonpayable",
     type: "function",
   },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "coldkey",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getTotalColdkeyStake",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "hotkey",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getTotalHotkeyStake",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
 ];
 
 export const IMetagraphABI = [
