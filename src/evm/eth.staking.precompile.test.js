@@ -328,5 +328,97 @@ describe("Staking precompile", () => {
       proxies = await api.query.proxy.proxies(publicKey);
       expect(proxies[0].length).to.be.eq(0);
     });
+
+  });
+
+  it("Can get total stake for coldkey", async () => {
+    await usingEthApi(async (provider) => {
+      const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
+      const netuid = 1;
+
+      let stakeBefore;
+      await usingApi(async (api) => {
+        stakeBefore = u256toBigNumber(
+          await api.query.subtensorModule.alpha(
+            hotkey.address,
+            ss58mirror,
+            netuid
+          )
+        );
+      });
+
+      await usingEthApi(async (provider) => {
+        // Create a contract instances
+        const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+        const contract = new ethers.Contract(
+          ISTAKING_ADDRESS,
+          IStakingABI,
+          signer
+        );
+
+        // Add stake
+        const tx = await contract.addStake(hotkey.publicKey, netuid, {
+          value: amountStr,
+        });
+        await tx.wait();
+
+        await usingApi(async (api) => {
+          const coldPublicKey = convertH160ToPublicKey(fundedEthWallet.address);
+          const coldkeyStake = new BigNumber(
+            await contract.getTotalColdkeyStake(coldPublicKey)
+          );
+
+          // log the coldkey stake
+          console.log("Coldkey stake: ", coldkeyStake.toString());
+
+          expect(coldkeyStake).to.be.bignumber.gt(stakeBefore);
+        });
+      });
+    });
+  });
+
+  it("Can get total stake for hotkey", async () => {
+    await usingEthApi(async (provider) => {
+      const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
+      const netuid = 1;
+
+      let stakeBefore;
+      await usingApi(async (api) => {
+        stakeBefore = u256toBigNumber(
+          await api.query.subtensorModule.alpha(
+            hotkey.address,
+            ss58mirror,
+            netuid
+          )
+        );
+      });
+
+      await usingEthApi(async (provider) => {
+        // Create a contract instances
+        const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+        const contract = new ethers.Contract(
+          ISTAKING_ADDRESS,
+          IStakingABI,
+          signer
+        );
+
+        // Add stake
+        const tx = await contract.addStake(hotkey.publicKey, netuid, {
+          value: amountStr,
+        });
+        await tx.wait();
+
+        await usingApi(async (api) => {
+          const hotkeyStake = new BigNumber(
+            await contract.getTotalHotkeyStake(hotkey.publicKey)
+          );
+
+          // log the hotkey stake
+          console.log("Hotkey stake: ", hotkeyStake.toString());
+
+          expect(hotkeyStake).to.be.bignumber.gt(stakeBefore);
+        });
+      });
+    });
   });
 });
