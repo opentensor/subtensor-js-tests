@@ -11,6 +11,7 @@ const amount1TAO = convertTaoToRao(1.0);
 let ed;
 const hotkey = getRandomKeypair();
 const coldkey = getRandomKeypair();
+let netuid = 0;
 
 describe("Neuron metagraph data test", () => {
   before(async () => {
@@ -45,17 +46,20 @@ describe("Neuron metagraph data test", () => {
       );
       await sendTransaction(api, txSudoSetBalance3, tk.alice);
 
-      const netuid = 1;
+      const registerNetwork = api.tx.subtensorModule.registerNetwork(
+        hotkey.address
+      );
+      await sendTransaction(api, registerNetwork, tk.alice);
 
-      let netuid_1_exist = (
-        await api.query.subtensorModule.networksAdded(netuid)
-      ).toHuman();
+      const totalNetworks = (
+        await api.query.subtensorModule.totalNetworks()
+      ).toNumber();
 
-      // add the first subnet if not created yet
-      if (!netuid_1_exist) {
-        const registerNetwork = api.tx.subtensorModule.registerNetwork();
-        await sendTransaction(api, registerNetwork, tk.alice);
-      }
+      // root network should be inited already
+      expect(totalNetworks).to.be.greaterThan(1);
+
+      netuid = totalNetworks - 1;
+      console.log(`Will use the new registered subnet ${netuid} for testing`);
 
       // register to network if no any neuron registered before
       let uid_count = (
@@ -74,7 +78,6 @@ describe("Neuron metagraph data test", () => {
 
   it("Metagraph data ", async () => {
     await usingEthApi(async (provider) => {
-      const netuid = 1;
       // check the data availability by check the first neuron.
       const uid = 0;
 
