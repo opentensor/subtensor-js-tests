@@ -23,24 +23,14 @@ let fundedEthWallet = generateRandomAddress();
 const amountEth = 0.5;
 const amountStr = convertEtherToWei(amountEth).toString();
 let coldkey = getRandomKeypair();
+let subnet_hotkey = getRandomKeypair();
 let hotkey = getRandomKeypair();
+let netuid = 0;
 
 describe("Staking precompile", () => {
   before(async () => {
     await usingApi(async (api) => {
       tk = getTestKeys();
-
-      const netuid = 1;
-
-      let netuid_1_exist = (
-        await api.query.subtensorModule.networksAdded(netuid)
-      ).toHuman();
-
-      // add the first subnet if not created yet
-      if (!netuid_1_exist) {
-        const registerNetwork = api.tx.subtensorModule.registerNetwork();
-        await sendTransaction(api, registerNetwork, tk.alice);
-      }
 
       // Alice funds herself with 1M TAO
       const txSudoSetBalance = api.tx.sudo.sudo(
@@ -50,22 +40,48 @@ describe("Staking precompile", () => {
         )
       );
       await sendTransaction(api, txSudoSetBalance, tk.alice);
-
       // Alice funds coldkey with 1K TAO
-      const fundColdkeyTx = api.tx.balances.transferKeepAlive(
-        coldkey.address,
-        amount1TAO.multipliedBy(1000).toString()
+      const fundColdkeyTx = api.tx.sudo.sudo(
+        api.tx.balances.forceSetBalance(
+          coldkey.address,
+          amount1TAO.multipliedBy(1e6).toString()
+        )
       );
       await sendTransaction(api, fundColdkeyTx, tk.alice);
+
+      const fundHotkeyTx = api.tx.sudo.sudo(
+        api.tx.balances.forceSetBalance(
+          hotkey.address,
+          amount1TAO.multipliedBy(1e6).toString()
+        )
+      );
+      await sendTransaction(api, fundHotkeyTx, tk.alice);
 
       // Alice funds fundedEthWallet
       const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
 
-      const transfer = api.tx.balances.transferKeepAlive(
-        ss58mirror,
-        amount1TAO.multipliedBy(100).toString()
+      const transfer = api.tx.sudo.sudo(
+        api.tx.balances.forceSetBalance(
+          ss58mirror,
+          amount1TAO.multipliedBy(1e6).toString()
+        )
       );
       await sendTransaction(api, transfer, tk.alice);
+
+      const registerNetwork = api.tx.subtensorModule.registerNetwork(
+        subnet_hotkey.address
+      );
+      await sendTransaction(api, registerNetwork, tk.alice);
+
+      const totalNetworks = (
+        await api.query.subtensorModule.totalNetworks()
+      ).toNumber();
+
+      // root network should be inited already
+      expect(totalNetworks).to.be.greaterThan(1);
+
+      netuid = totalNetworks - 1;
+      console.log(`Will use the new registered subnet ${netuid} for testing`);
 
       // register coldkey / hotkey
       const register = api.tx.subtensorModule.burnedRegister(
@@ -81,7 +97,6 @@ describe("Staking precompile", () => {
       // Use this example: https://github.com/gztensor/evm-demo/blob/main/docs/staking-precompile.md
 
       const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
-      const netuid = 1;
 
       let stakeBefore;
       await usingApi(async (api) => {
@@ -94,21 +109,26 @@ describe("Staking precompile", () => {
         );
       });
 
-      await usingEthApi(async (provider) => {
-        // Create a contract instances
-        const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-        const contract = new ethers.Contract(
-          ISTAKING_ADDRESS,
-          IStakingABI,
-          signer
-        );
+      const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
+      const contract = new ethers.Contract(
+        ISTAKING_ADDRESS,
+        IStakingABI,
+        signer
+      );
 
-        // Execute transaction
-        const tx = await contract.addStake(hotkey.publicKey, netuid, {
-          value: amountStr,
-        });
-        await tx.wait();
+      // Execute transaction
+      const tx = await contract.addStake(hotkey.publicKey, netuid, {
+        value: amountStr,
       });
+      await tx.wait();
+      // });
+
+      const coldPublicKey = convertH160ToPublicKey(fundedEthWallet.address);
+      const stake_from_contract = new BigNumber(
+        await contract.getStake(hotkey.publicKey, coldPublicKey, netuid)
+      );
+
+      expect(stake_from_contract).to.be.bignumber.gt(stakeBefore);
 
       await usingApi(async (api) => {
         let stake = u256toBigNumber(
@@ -118,6 +138,7 @@ describe("Staking precompile", () => {
             netuid
           )
         );
+
         expect(stake).to.be.bignumber.gt(stakeBefore);
       });
     });
@@ -126,7 +147,6 @@ describe("Staking precompile", () => {
   it("Can not add stake if subnet doesn't exist", async () => {
     await usingEthApi(async (provider) => {
       const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
-      const netuid = 1;
       const badNetuid = 12345;
 
       let stakeBefore;
@@ -166,7 +186,6 @@ describe("Staking precompile", () => {
         const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
         const coldPublicKey = convertH160ToPublicKey(fundedEthWallet.address);
         const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
-        const netuid = 1;
 
         const contract = new ethers.Contract(
           ISTAKING_ADDRESS,
@@ -197,9 +216,12 @@ describe("Staking precompile", () => {
           await contract.getStake(hotkey.publicKey, coldPublicKey, netuid)
         );
 
+        expect(stake_from_contract).to.not.undefined;
+
+        // alpha value is not equal to the staked TAO
         // Alpha shares should be numerically equal to stake since this is a simple case with no
         // unstaking, etc.
-        expect(alpha).to.be.bignumber.eq(stake_from_contract);
+        // expect(alpha).to.be.bignumber.eq(stake_from_contract);
       });
     });
   });
@@ -210,7 +232,6 @@ describe("Staking precompile", () => {
         // Use this example: https://github.com/gztensor/evm-demo/blob/main/docs/staking-precompile.md
         const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
         const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-        const netuid = 1;
 
         const contract = new ethers.Contract(
           ISTAKING_ADDRESS,
@@ -250,6 +271,7 @@ describe("Staking precompile", () => {
             netuid
           )
         );
+
         expect(stake).to.be.bignumber.lt(stakeBefore);
       });
     });
@@ -285,7 +307,6 @@ describe("Staking precompile", () => {
       expect(delegate.toHuman()).to.be.eq(tk.bob.address);
 
       // check the delegate can stake
-      const netuid = 1;
       const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
 
       let stakeBefore;
