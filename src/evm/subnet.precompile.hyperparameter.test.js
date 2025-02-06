@@ -5,883 +5,14 @@ import { convertH160ToSS58, generateRandomAddress } from "../util/address.js";
 import { getExistentialDeposit } from "../util/helpers.js";
 import { ethers } from "ethers";
 import { expect } from "chai";
+import { ISUBNET_ADDRESS, ISubnetABI } from "../util/precompile.js";
 
 let tk;
 const amount1TAO = convertTaoToRao(1.0);
 let fundedEthWallet = generateRandomAddress();
 let ed;
 
-let abi = [
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getAdjustmentAlpha",
-    outputs: [
-      {
-        internalType: "uint64",
-        name: "",
-        type: "uint64",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getAlphaValues",
-    outputs: [
-      {
-        internalType: "uint16",
-        name: "",
-        type: "uint16",
-      },
-      {
-        internalType: "uint16",
-        name: "",
-        type: "uint16",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getBondsMovingAverage",
-    outputs: [
-      {
-        internalType: "uint64",
-        name: "",
-        type: "uint64",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getCommitRevealWeightsEnabled",
-    outputs: [
-      {
-        internalType: "bool",
-        name: "",
-        type: "bool",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getDifficulty",
-    outputs: [
-      {
-        internalType: "uint64",
-        name: "",
-        type: "uint64",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "",
-        type: "uint16",
-      },
-    ],
-    name: "getImmunityPeriod",
-    outputs: [
-      {
-        internalType: "uint64",
-        name: "",
-        type: "uint64",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "",
-        type: "uint16",
-      },
-    ],
-    name: "getKappa",
-    outputs: [
-      {
-        internalType: "uint16",
-        name: "",
-        type: "uint16",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getMaxBurn",
-    outputs: [
-      {
-        internalType: "uint64",
-        name: "",
-        type: "uint64",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getMaxDifficulty",
-    outputs: [
-      {
-        internalType: "uint64",
-        name: "",
-        type: "uint64",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getMaxWeightLimit",
-    outputs: [
-      {
-        internalType: "uint64",
-        name: "",
-        type: "uint64",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getMinAllowedWeights",
-    outputs: [
-      {
-        internalType: "uint16",
-        name: "",
-        type: "uint16",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getMinBurn",
-    outputs: [
-      {
-        internalType: "uint64",
-        name: "",
-        type: "uint64",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getMinDifficulty",
-    outputs: [
-      {
-        internalType: "uint64",
-        name: "",
-        type: "uint64",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getNetworkRegistrationAllowed",
-    outputs: [
-      {
-        internalType: "bool",
-        name: "",
-        type: "bool",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "",
-        type: "uint16",
-      },
-    ],
-    name: "getRho",
-    outputs: [
-      {
-        internalType: "uint16",
-        name: "",
-        type: "uint16",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getServingRateLimit",
-    outputs: [
-      {
-        internalType: "uint64",
-        name: "",
-        type: "uint64",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getWeightsSetRateLimit",
-    outputs: [
-      {
-        internalType: "uint64",
-        name: "",
-        type: "uint64",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getWeightsVersionKey",
-    outputs: [
-      {
-        internalType: "uint64",
-        name: "",
-        type: "uint64",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "bytes32",
-        name: "hotkey",
-        type: "bytes32",
-      },
-      {
-        internalType: "bytes",
-        name: "subnetName",
-        type: "bytes",
-      },
-      {
-        internalType: "bytes",
-        name: "githubRepo",
-        type: "bytes",
-      },
-      {
-        internalType: "bytes",
-        name: "subnetContact",
-        type: "bytes",
-      },
-    ],
-    name: "registerNetwork",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "bytes32",
-        name: "hotkey",
-        type: "bytes32",
-      },
-    ],
-    name: "registerNetwork",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint16",
-        name: "activityCutoff",
-        type: "uint16",
-      },
-    ],
-    name: "setActivityCutoff",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getActivityCutoff",
-    outputs: [
-      {
-        internalType: "uint16",
-        name: "",
-        type: "uint16",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint64",
-        name: "adjustmentAlpha",
-        type: "uint64",
-      },
-    ],
-    name: "setAdjustmentAlpha",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint16",
-        name: "alphaLow",
-        type: "uint16",
-      },
-      {
-        internalType: "uint16",
-        name: "alphaHigh",
-        type: "uint16",
-      },
-    ],
-    name: "setAlphaValues",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint64",
-        name: "bondsMovingAverage",
-        type: "uint64",
-      },
-    ],
-    name: "setBondsMovingAverage",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "bool",
-        name: "commitRevealWeightsEnabled",
-        type: "bool",
-      },
-    ],
-    name: "setCommitRevealWeightsEnabled",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getCommitRevealWeightsInterval",
-    outputs: [
-      {
-        internalType: "uint64",
-        name: "",
-        type: "uint64",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint64",
-        name: "commitRevealWeightsInterval",
-        type: "uint64",
-      },
-    ],
-    name: "setCommitRevealWeightsInterval",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint64",
-        name: "difficulty",
-        type: "uint64",
-      },
-    ],
-    name: "setDifficulty",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint64",
-        name: "immunityPeriod",
-        type: "uint64",
-      },
-    ],
-    name: "setImmunityPeriod",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint16",
-        name: "kappa",
-        type: "uint16",
-      },
-    ],
-    name: "setKappa",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getLiquidAlphaEnabled",
-    outputs: [
-      {
-        internalType: "bool",
-        name: "",
-        type: "bool",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "bool",
-        name: "liquidAlphaEnabled",
-        type: "bool",
-      },
-    ],
-    name: "setLiquidAlphaEnabled",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint64",
-        name: "maxBurn",
-        type: "uint64",
-      },
-    ],
-    name: "setMaxBurn",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint64",
-        name: "maxDifficulty",
-        type: "uint64",
-      },
-    ],
-    name: "setMaxDifficulty",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint64",
-        name: "maxWeightLimit",
-        type: "uint64",
-      },
-    ],
-    name: "setMaxWeightLimit",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint16",
-        name: "minAllowedWeights",
-        type: "uint16",
-      },
-    ],
-    name: "setMinAllowedWeights",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint64",
-        name: "minBurn",
-        type: "uint64",
-      },
-    ],
-    name: "setMinBurn",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint64",
-        name: "minDifficulty",
-        type: "uint64",
-      },
-    ],
-    name: "setMinDifficulty",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-    ],
-    name: "getNetworkPowRegistrationAllowed",
-    outputs: [
-      {
-        internalType: "bool",
-        name: "",
-        type: "bool",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "bool",
-        name: "networkPowRegistrationAllowed",
-        type: "bool",
-      },
-    ],
-    name: "setNetworkPowRegistrationAllowed",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "bool",
-        name: "networkRegistrationAllowed",
-        type: "bool",
-      },
-    ],
-    name: "setNetworkRegistrationAllowed",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint16",
-        name: "rho",
-        type: "uint16",
-      },
-    ],
-    name: "setRho",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint64",
-        name: "servingRateLimit",
-        type: "uint64",
-      },
-    ],
-    name: "setServingRateLimit",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint64",
-        name: "weightsSetRateLimit",
-        type: "uint64",
-      },
-    ],
-    name: "setWeightsSetRateLimit",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "uint64",
-        name: "weightsVersionKey",
-        type: "uint64",
-      },
-    ],
-    name: "setWeightsVersionKey",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-];
-
-let address = "0x0000000000000000000000000000000000000803";
-let totalNetwork = 0;
-let newSubnetId = 0;
+let totalNetworks = 0;
 
 describe("Subnet precompile test", () => {
   before(async () => {
@@ -901,39 +32,42 @@ describe("Subnet precompile test", () => {
 
   it("Can register network without identity info", async () => {
     await usingEthApi(async (provider) => {
-      usingApi(async (api) => {
-        totalNetwork = api.query.subtensorModule.totalNetwork().toHuman;
+      await usingApi(async (api) => {
+        totalNetworks = (
+          await api.query.subtensorModule.totalNetworks()
+        ).toNumber();
       });
 
       // Create a contract instances
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-      const contract = new ethers.Contract(address, abi, signer);
+      const contract = new ethers.Contract(ISUBNET_ADDRESS, ISubnetABI, signer);
       const tx = await contract.registerNetwork(tk.alice.publicKey);
       await tx.wait();
 
       usingApi(async (api) => {
-        expect(await api.query.subtensorModule.totalNetwork().toHuman).to.eq(
-          totalNetwork + 1
+        expect(await api.query.subtensorModule.totalNetworks().toHuman).to.eq(
+          totalNetworks + 1
         );
         expect(
           await api.query.subtensorModule
-            .subnetOwner(totalNetwork + 1)
+            .subnetOwner(totalNetworks + 1)
             .to.eq(convertH160ToSS58(fundedEthWallet.address))
         );
       });
-      newSubnetId = totalNetwork + 1;
     });
   });
 
   it("Can register network with identity info", async () => {
     await usingEthApi(async (provider) => {
-      usingApi(async (api) => {
-        totalNetwork = api.query.subtensorModule.totalNetwork().toHuman;
+      await usingApi(async (api) => {
+        totalNetworks = (
+          await api.query.subtensorModule.totalNetworks()
+        ).toNumber();
       });
 
       // Create a contract instances
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-      const contract = new ethers.Contract(address, abi, signer);
+      const contract = new ethers.Contract(ISUBNET_ADDRESS, ISubnetABI, signer);
 
       // Execute transaction
       const name = ethers.toUtf8Bytes("name");
@@ -948,12 +82,12 @@ describe("Subnet precompile test", () => {
       await tx.wait();
 
       usingApi(async (api) => {
-        expect(await api.query.subtensorModule.totalNetwork().toHuman).to.eq(
-          totalNetwork + 1
+        expect(await api.query.subtensorModule.totalNetworks().toHuman).to.eq(
+          totalNetworks + 1
         );
         expect(
           await api.query.subtensorModule
-            .subnetOwner(totalNetwork + 1)
+            .subnetOwner(totalNetworks + 1)
             .to.eq(convertH160ToSS58(fundedEthWallet.address))
         );
       });
@@ -964,7 +98,15 @@ describe("Subnet precompile test", () => {
     await usingEthApi(async (provider) => {
       // Create a contract instances
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-      const contract = new ethers.Contract(address, abi, signer);
+      const contract = new ethers.Contract(ISUBNET_ADDRESS, ISubnetABI, signer);
+
+      await usingApi(async (api) => {
+        totalNetworks = (
+          await api.query.subtensorModule.totalNetworks()
+        ).toNumber();
+      });
+
+      const newSubnetId = totalNetworks - 1;
 
       // servingRateLimit hyperparameter
       let newValue = 100;
@@ -1221,22 +363,22 @@ describe("Subnet precompile test", () => {
       expect(valueFromContract).to.eq(newValue);
       expect(valueFromContract).to.eq(onchainValue);
 
-      // minBurn hyperparameter
-      newValue = 112;
+      // minBurn hyperparameter. only sudo can set it now
+      // newValue = 112;
 
-      tx = await contract.setMinBurn(newSubnetId, newValue);
-      await tx.wait();
+      // tx = await contract.setMinBurn(newSubnetId, newValue);
+      // await tx.wait();
 
-      await usingApi(async (api) => {
-        onchainValue = Number(
-          await api.query.subtensorModule.minBurn(newSubnetId)
-        );
-      });
+      // await usingApi(async (api) => {
+      //   onchainValue = Number(
+      //     await api.query.subtensorModule.minBurn(newSubnetId)
+      //   );
+      // });
 
-      valueFromContract = Number(await contract.getMinBurn(newSubnetId));
+      // valueFromContract = Number(await contract.getMinBurn(newSubnetId));
 
-      expect(valueFromContract).to.eq(newValue);
-      expect(valueFromContract).to.eq(onchainValue);
+      // expect(valueFromContract).to.eq(newValue);
+      // expect(valueFromContract).to.eq(onchainValue);
 
       // maxBurn hyperparameter
       newValue = 113;
