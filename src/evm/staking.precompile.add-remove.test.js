@@ -121,7 +121,6 @@ describe("Staking precompile", () => {
         value: amountStr,
       });
       await tx.wait();
-      // });
 
       const coldPublicKey = convertH160ToPublicKey(fundedEthWallet.address);
       const stake_from_contract = new BigNumber(
