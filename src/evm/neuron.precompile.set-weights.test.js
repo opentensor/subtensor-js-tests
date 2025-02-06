@@ -101,6 +101,20 @@ describe("EVM neuron weights test", () => {
 
   it("EVM neuron set weights via call precompile", async () => {
     await usingEthApi(async (provider) => {
+      await usingApi(async (api) => {
+        const sudoSetCommitRevealWeightsEnabled = api.tx.sudo.sudo(
+          api.tx.adminUtils.sudoSetCommitRevealWeightsEnabled(netuid, false)
+        );
+
+        await sendTransaction(api, sudoSetCommitRevealWeightsEnabled, tk.alice);
+
+        const sudoSetWeightsSetRateLimit = api.tx.sudo.sudo(
+          api.tx.adminUtils.sudoSetWeightsSetRateLimit(netuid, 0)
+        );
+
+        await sendTransaction(api, sudoSetWeightsSetRateLimit, tk.alice);
+      });
+
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
       const contract = new ethers.Contract(INEURON_ADDRESS, INeuronABI, signer);
       const dests = [1];
@@ -117,6 +131,7 @@ describe("EVM neuron weights test", () => {
             convertH160ToPublicKey(fundedEthWallet.address)
           )
         ).toHuman();
+
         expect(neuron_uid).to.not.be.undefined;
 
         // check weigh is set successfully
