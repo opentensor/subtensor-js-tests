@@ -14,7 +14,6 @@ import {
   ss58ToH160,
 } from "../util/eth-helpers.js";
 import { getExistentialDeposit, getTaoBalance } from "../util/helpers.js";
-import { ISUBNETS_ADDRESS, ISubnetsABI } from "../util/precompile.js";
 import { decodeAddress } from "@polkadot/util-crypto";
 import { assert, ethers } from "ethers";
 import BigNumber from "bignumber.js";
@@ -28,6 +27,8 @@ let ed;
 
 // coldkey
 const coldkey = getRandomKeypair();
+const subnet_hotkey = getRandomKeypair();
+const hotkey = getRandomKeypair();
 // validator
 const validator = getRandomKeypair();
 // miner
@@ -35,6 +36,7 @@ const miner = getRandomKeypair();
 // nominator
 const nominator = getRandomKeypair();
 const sudo = getTestKeys().alice;
+let netuid = 0;
 
 // env test for reward
 describe("Staking precompile", () => {
@@ -76,7 +78,21 @@ describe("Staking precompile", () => {
       );
       await sendTransaction(api, txSudoSetBalance4, sudo);
 
-      const netuid = 1;
+      const registerNetwork = api.tx.subtensorModule.registerNetwork(
+        subnet_hotkey.address
+      );
+      await sendTransaction(api, registerNetwork, coldkey);
+
+      const totalNetworks = (
+        await api.query.subtensorModule.totalNetworks()
+      ).toNumber();
+
+      // root network should be inited already
+      expect(totalNetworks).to.be.greaterThan(1);
+
+      netuid = totalNetworks - 1;
+      console.log(`Will use the new registered subnet ${netuid} for testing`);
+
       const root_id = 0;
       const root_tempo = 9; // neet root epoch to happen before subnet tempo
       const subnet_tempo = 10;
@@ -87,9 +103,6 @@ describe("Staking precompile", () => {
         api.tx.adminUtils.sudoSetTxRateLimit(0)
       );
       await sendTransaction(api, txSudoSetTxRateLimit, sudo);
-
-      const registerNetwork = api.tx.subtensorModule.registerNetwork();
-      await sendTransaction(api, registerNetwork, coldkey);
 
       // set tempo for both subnet 0 and root net
       const txSudoSetTemp = api.tx.sudo.sudo(
@@ -123,7 +136,7 @@ describe("Staking precompile", () => {
       );
       await sendTransaction(api, registerNominator, coldkey);
 
-      // sudo_set_hotkey_emission_tempo
+      sudo_set_hotkey_emission_tempo;
       const txSudoSetEmissionTemp = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetHotkeyEmissionTempo(hotkey_tempo)
       );
@@ -211,7 +224,6 @@ describe("Staking precompile", () => {
 
   it("Staker receives rewards", async () => {
     await usingApi(async (api) => {
-      const netuid = 1;
       const root_id = 0;
       const stake = 100000000000;
       const miner_stake = 1000000000;
@@ -223,18 +235,21 @@ describe("Staking precompile", () => {
       //   Give 100% of parent stake to childkey
       const txValidatorStake = api.tx.subtensorModule.addStake(
         validator.address,
+        netuid,
         stake
       );
       await sendTransaction(api, txValidatorStake, coldkey);
 
       const txMinerStake = api.tx.subtensorModule.addStake(
         miner.address,
+        netuid,
         miner_stake
       );
       await sendTransaction(api, txMinerStake, coldkey);
 
       const txMonimatorrStake = api.tx.subtensorModule.addStake(
         nominator.address,
+        netuid,
         stake
       );
       await sendTransaction(api, txMonimatorrStake, coldkey);
