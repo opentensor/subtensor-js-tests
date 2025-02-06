@@ -5,7 +5,7 @@ import { convertH160ToSS58, generateRandomAddress } from "../util/address.js";
 import { getExistentialDeposit } from "../util/helpers.js";
 import { ethers } from "ethers";
 import { expect } from "chai";
-import { ISUBNET_ADDRESS, ISubnetABI } from "../util/precompile.js";
+import { ISUBNETS_ADDRESS, ISubnetsABI } from "../util/precompile.js";
 
 let tk;
 const amount1TAO = convertTaoToRao(1.0);
@@ -40,7 +40,7 @@ describe("Subnet precompile test", () => {
 
       // Create a contract instances
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-      const contract = new ethers.Contract(ISUBNET_ADDRESS, ISubnetABI, signer);
+      const contract = new ethers.Contract(ISUBNETS_ADDRESS, ISubnetsABI, signer);
       const tx = await contract.registerNetwork(tk.alice.publicKey);
       await tx.wait();
 
@@ -67,7 +67,7 @@ describe("Subnet precompile test", () => {
 
       // Create a contract instances
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-      const contract = new ethers.Contract(ISUBNET_ADDRESS, ISubnetABI, signer);
+      const contract = new ethers.Contract(ISUBNETS_ADDRESS, ISubnetsABI, signer);
 
       // Execute transaction
       const name = ethers.toUtf8Bytes("name");
@@ -98,7 +98,7 @@ describe("Subnet precompile test", () => {
     await usingEthApi(async (provider) => {
       // Create a contract instances
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-      const contract = new ethers.Contract(ISUBNET_ADDRESS, ISubnetABI, signer);
+      const contract = new ethers.Contract(ISUBNETS_ADDRESS, ISubnetsABI, signer);
 
       await usingApi(async (api) => {
         totalNetworks = (
