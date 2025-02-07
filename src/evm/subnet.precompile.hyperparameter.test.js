@@ -5,7 +5,7 @@ import { convertH160ToSS58, generateRandomAddress } from "../util/address.js";
 import { getExistentialDeposit } from "../util/helpers.js";
 import { ethers } from "ethers";
 import { expect } from "chai";
-import { ISUBNETS_ADDRESS, ISubnetsABI } from "../util/precompile.js";
+import { ISUBNET_ADDRESS, ISubnetABI } from "../util/precompile.js";
 
 let tk;
 const amount1TAO = convertTaoToRao(1.0);
@@ -40,7 +40,7 @@ describe("Subnet precompile test", () => {
 
       // Create a contract instances
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-      const contract = new ethers.Contract(ISUBNETS_ADDRESS, ISubnetsABI, signer);
+      const contract = new ethers.Contract(ISUBNET_ADDRESS, ISubnetABI, signer);
       const tx = await contract.registerNetwork(tk.alice.publicKey);
       await tx.wait();
 
@@ -67,17 +67,26 @@ describe("Subnet precompile test", () => {
 
       // Create a contract instances
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-      const contract = new ethers.Contract(ISUBNETS_ADDRESS, ISubnetsABI, signer);
+      const contract = new ethers.Contract(ISUBNET_ADDRESS, ISubnetABI, signer);
 
       // Execute transaction
       const name = ethers.toUtf8Bytes("name");
       const repo = ethers.toUtf8Bytes("repo");
       const contact = ethers.toUtf8Bytes("contact");
+      const subnetUrl = ethers.toUtf8Bytes("subnetUrl");
+      const discord = ethers.toUtf8Bytes("discord");
+      const description = ethers.toUtf8Bytes("description");
+      const additional = ethers.toUtf8Bytes("additional");
+
       const tx = await contract.registerNetwork(
-        tk.alice.publicKey,
+        tk.bob.publicKey,
         name,
         repo,
-        contact
+        contact,
+        subnetUrl,
+        discord,
+        description,
+        additional
       );
       await tx.wait();
 
@@ -98,7 +107,7 @@ describe("Subnet precompile test", () => {
     await usingEthApi(async (provider) => {
       // Create a contract instances
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-      const contract = new ethers.Contract(ISUBNETS_ADDRESS, ISubnetsABI, signer);
+      const contract = new ethers.Contract(ISUBNET_ADDRESS, ISubnetABI, signer);
 
       await usingApi(async (api) => {
         totalNetworks = (
