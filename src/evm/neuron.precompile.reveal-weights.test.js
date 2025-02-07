@@ -114,6 +114,7 @@ describe("EVM neuron weights test", () => {
       await sendTransaction(api, registerValidator, coldkey);
 
       // sometimes we need update it because of the reveal commit must be in the correct epoch
+      // we can also update Tempo long enough, then we can reveal at the same epoch.
       const txSudoSetCommitRevealWeightsInterval = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetCommitRevealWeightsInterval(netuid, 1)
       );
