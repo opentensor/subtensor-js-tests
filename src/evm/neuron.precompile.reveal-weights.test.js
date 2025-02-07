@@ -17,16 +17,17 @@ let tk;
 const amount1TAO = convertTaoToRao(1.0);
 let fundedEthWallet = generateRandomAddress();
 let coldkey = getRandomKeypair();
-
+let hotkey = getRandomKeypair();
 // weights data
 const uids = [1];
 const values = [5];
 const salt = [9];
 const version_key = 0;
+let netuid = 0;
 
-function getCommitHash() {
+function getCommitHash(netuid) {
   const registry = new TypeRegistry();
-  const netuid = 1;
+
   let publicKey = convertH160ToPublicKey(fundedEthWallet.address);
   console.log(publicKey);
 
@@ -42,6 +43,7 @@ function getCommitHash() {
     ],
     [publicKey, netuid, uids, values, salt, version_key]
   );
+
   console.log("Encoded Array:", tupleData.toU8a());
 
   const hash = blake2AsU8a(tupleData.toU8a());
@@ -52,7 +54,6 @@ function getCommitHash() {
 describe("EVM neuron weights test", () => {
   before(async () => {
     await usingApi(async (api) => {
-      const netuid = 1;
       tk = getTestKeys();
 
       // Alice funds herself with 1M TAO
@@ -89,17 +90,20 @@ describe("EVM neuron weights test", () => {
       );
       await sendTransaction(api, txSudoSetWeightsSetRateLimit, tk.alice);
 
-      let netuid_1_exist = (
-        await api.query.subtensorModule.networksAdded(netuid)
-      ).toHuman();
+      const registerNetwork = api.tx.subtensorModule.registerNetwork(
+        hotkey.address
+      );
+      await sendTransaction(api, registerNetwork, tk.alice);
 
-      // add the first subnet if not created yet
-      if (!netuid_1_exist) {
-        const registerNetwork = api.tx.subtensorModule.registerNetwork(
-          tk.bob.address
-        );
-        await sendTransaction(api, registerNetwork, tk.alice);
-      }
+      const totalNetworks = (
+        await api.query.subtensorModule.totalNetworks()
+      ).toNumber();
+
+      // root network should be inited already
+      expect(totalNetworks).to.be.greaterThan(1);
+
+      netuid = totalNetworks - 1;
+      console.log(`Will use the new registered subnet ${netuid} for testing`);
 
       // register to network
       const registerValidator = api.tx.subtensorModule.burnedRegister(
@@ -109,20 +113,26 @@ describe("EVM neuron weights test", () => {
 
       await sendTransaction(api, registerValidator, coldkey);
 
+      // sometimes we need update it because of the reveal commit must be in the correct epoch
       const txSudoSetCommitRevealWeightsInterval = api.tx.sudo.sudo(
-        api.tx.adminUtils.sudoSetCommitRevealWeightsInterval(netuid, 0)
+        api.tx.adminUtils.sudoSetCommitRevealWeightsInterval(netuid, 1)
       );
       await sendTransaction(
         api,
         txSudoSetCommitRevealWeightsInterval,
         tk.alice
       );
+
+      const sudoSetWeightsSetRateLimit = api.tx.sudo.sudo(
+        api.tx.adminUtils.sudoSetWeightsSetRateLimit(netuid, 0)
+      );
+
+      await sendTransaction(api, sudoSetWeightsSetRateLimit, tk.alice);
     });
   });
 
   it("EVM neuron commit weights via call precompile", async () => {
     await usingApi(async (api) => {
-      const netuid = 1;
       const sudoSetCommitRevealWeightsEnabled = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetCommitRevealWeightsEnabled(netuid, true)
       );
@@ -131,18 +141,15 @@ describe("EVM neuron weights test", () => {
     });
 
     await usingEthApi(async (provider) => {
-      const netuid = 1;
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
       const contract = new ethers.Contract(INEURON_ADDRESS, INeuronABI, signer);
-      const commit_hash = getCommitHash();
+      const commit_hash = getCommitHash(netuid);
       const bigNumberValue = ethers.toBigInt(commit_hash);
       const tx = await contract.commitWeights(netuid, bigNumberValue);
       await tx.wait();
     });
 
     await usingApi(async (api) => {
-      const netuid = 1;
-
       const weightCommit = (
         await api.query.subtensorModule.weightCommits(
           netuid,
@@ -157,7 +164,6 @@ describe("EVM neuron weights test", () => {
 
   it("EVM neuron reveal weights via call precompile", async () => {
     await usingEthApi(async (provider) => {
-      const netuid = 1;
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
       const contract = new ethers.Contract(INEURON_ADDRESS, INeuronABI, signer);
 
@@ -172,8 +178,6 @@ describe("EVM neuron weights test", () => {
     });
 
     await usingApi(async (api) => {
-      const netuid = 1;
-
       const weightCommit = (
         await api.query.subtensorModule.weightCommits(
           netuid,
