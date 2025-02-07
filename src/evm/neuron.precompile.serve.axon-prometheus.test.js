@@ -12,9 +12,11 @@ const amount1TAO = convertTaoToRao(1.0);
 let ed;
 
 let coldkey = getRandomKeypair();
+let hotkey = getRandomKeypair();
 let fundedEthWallet1 = generateRandomAddress();
 let fundedEthWallet2 = generateRandomAddress();
 let fundedEthWallet3 = generateRandomAddress();
+let netuid = 0;
 
 describe("Serve Axon Prometheus test", () => {
   before(async () => {
@@ -67,17 +69,20 @@ describe("Serve Axon Prometheus test", () => {
       );
       await sendTransaction(api, txSudoSetBalance5, tk.alice);
 
-      const netuid = 1;
+      const registerNetwork = api.tx.subtensorModule.registerNetwork(
+        hotkey.address
+      );
+      await sendTransaction(api, registerNetwork, tk.alice);
 
-      let netuid_1_exist = (
-        await api.query.subtensorModule.networksAdded(netuid)
-      ).toHuman();
+      const totalNetworks = (
+        await api.query.subtensorModule.totalNetworks()
+      ).toNumber();
 
-      // add the first subnet if not created yet
-      if (!netuid_1_exist) {
-        const registerNetwork = api.tx.subtensorModule.registerNetwork(tk.bob);
-        await sendTransaction(api, registerNetwork, tk.alice);
-      }
+      // root network should be inited already
+      expect(totalNetworks).to.be.greaterThan(1);
+
+      netuid = totalNetworks - 1;
+      console.log(`Will use the new registered subnet ${netuid} for testing`);
 
       // register coldkey / hotkey
       const register = api.tx.subtensorModule.burnedRegister(
@@ -102,7 +107,6 @@ describe("Serve Axon Prometheus test", () => {
 
   it("Serve Axon", async () => {
     await usingEthApi(async (provider) => {
-      const netuid = 1;
       const version = 0;
       const ip = 1;
       const port = 2;
@@ -148,7 +152,6 @@ describe("Serve Axon Prometheus test", () => {
 
   it("Serve Axon TLS", async () => {
     await usingEthApi(async (provider) => {
-      const netuid = 1;
       const version = 0;
       const ip = 1;
       const port = 2;
@@ -202,7 +205,6 @@ describe("Serve Axon Prometheus test", () => {
 
   it("Serve Prometheus", async () => {
     await usingEthApi(async (provider) => {
-      const netuid = 1;
       const version = 0;
       const ip = 1;
       const port = 2;
