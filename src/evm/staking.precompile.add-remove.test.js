@@ -68,21 +68,20 @@ describe("Staking precompile", () => {
       );
       await sendTransaction(api, transfer, tk.alice);
 
+      const registerNetwork = api.tx.subtensorModule.registerNetwork(
+        subnet_hotkey.address
+      );
+      await sendTransaction(api, registerNetwork, tk.alice);
+
       const totalNetworks = (
         await api.query.subtensorModule.totalNetworks()
       ).toNumber();
-      netuid = totalNetworks - 1;
-
-      console.log(`Will use the new registered subnet ${netuid} for testing`);
 
       // root network should be inited already
       expect(totalNetworks).to.be.greaterThan(1);
 
-      const registerNetwork = api.tx.subtensorModule.burnedRegister(
-        netuid,
-        subnet_hotkey.address
-      );
-      await sendTransaction(api, registerNetwork, tk.alice);
+      netuid = totalNetworks - 1;
+      console.log(`Will use the new registered subnet ${netuid} for testing`);
 
       // register coldkey / hotkey
       const register = api.tx.subtensorModule.burnedRegister(
