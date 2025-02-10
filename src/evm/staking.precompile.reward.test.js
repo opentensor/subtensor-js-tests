@@ -136,12 +136,6 @@ describe("Staking precompile", () => {
       );
       await sendTransaction(api, registerNominator, coldkey);
 
-      sudo_set_hotkey_emission_tempo;
-      const txSudoSetEmissionTemp = api.tx.sudo.sudo(
-        api.tx.adminUtils.sudoSetHotkeyEmissionTempo(hotkey_tempo)
-      );
-      await sendTransaction(api, txSudoSetEmissionTemp, sudo);
-
       // set subnet 1, limit 0
       const txSudoSetWeightSetRateLimit = api.tx.sudo.sudo(
         api.tx.adminUtils.sudoSetWeightsSetRateLimit(netuid, 0)
@@ -214,17 +208,11 @@ describe("Staking precompile", () => {
       const txSudoSetWeightsSetRateLimit =
         api.tx.adminUtils.sudoSetWeightsSetRateLimit(netuid, 0);
       await sendTransaction(api, txSudoSetWeightsSetRateLimit, coldkey);
-
-      const txSudoSetRootWeightsSetRateLimit = api.tx.sudo.sudo(
-        api.tx.adminUtils.sudoSetWeightsSetRateLimit(root_id, 0)
-      );
-      await sendTransaction(api, txSudoSetRootWeightsSetRateLimit, sudo);
     });
   });
 
   it("Staker receives rewards", async () => {
     await usingApi(async (api) => {
-      const root_id = 0;
       const stake = 100000000000;
       const miner_stake = 1000000000;
 
@@ -277,15 +265,6 @@ describe("Staking precompile", () => {
         validator.address
       );
       await sendTransaction(api, txRootRegister, coldkey);
-
-      const txSetRootWeights = api.tx.subtensorModule.setRootWeights(
-        root_id,
-        validator.address,
-        [0, 1],
-        [0xffff, 0xffff],
-        0
-      );
-      await sendTransaction(api, txSetRootWeights, coldkey);
 
       while (true) {
         const pending = await api.query.subtensorModule.pendingEmission(netuid);

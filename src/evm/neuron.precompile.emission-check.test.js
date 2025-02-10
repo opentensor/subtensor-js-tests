@@ -6,36 +6,16 @@ import { expect } from "chai";
 import { assert, ethers } from "ethers";
 import { convertH160ToSS58, generateRandomAddress } from "../util/address.js";
 import { decodeAddress } from "@polkadot/util-crypto";
-
+import { INEURON_ADDRESS, INeuronABI } from "../util/precompile.js";
 let tk;
 const amount1TAO = convertTaoToRao(1.0);
 let ed;
+const registerHotkey = getRandomKeypair();
 const hotkey = getRandomKeypair();
 
 // as coldkey
 let fundedEthWallet = generateRandomAddress();
-
-const ISUBNETS_ADDRESS = "0x0000000000000000000000000000000000000804";
-const ISubnetsABI = [
-  {
-    inputs: [
-      {
-        internalType: "uint16",
-        name: "netuid",
-        type: "uint16",
-      },
-      {
-        internalType: "bytes32",
-        name: "hotkey",
-        type: "bytes32",
-      },
-    ],
-    name: "burnedRegister",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-];
+let netuid = 0;
 
 describe("Neuron burned register", () => {
   before(async () => {
@@ -70,24 +50,26 @@ describe("Neuron burned register", () => {
       );
       await sendTransaction(api, txSudoSetBalance3, tk.alice);
 
-      const netuid = 1;
+      const registerNetwork = api.tx.subtensorModule.registerNetwork(
+        registerHotkey.address
+      );
+      await sendTransaction(api, registerNetwork, tk.alice);
 
-      let netuid_1_exist = (
-        await api.query.subtensorModule.networksAdded(netuid)
-      ).toHuman();
+      const totalNetworks = (
+        await api.query.subtensorModule.totalNetworks()
+      ).toNumber();
 
-      // add the first subnet if not created yet
-      if (!netuid_1_exist) {
-        const registerNetwork = api.tx.subtensorModule.registerNetwork(tk.bob);
-        await sendTransaction(api, registerNetwork, tk.alice);
-      }
+      // root network should be inited already
+      expect(totalNetworks).to.be.greaterThan(1);
+
+      netuid = totalNetworks - 1;
+      console.log(`Will use the new registered subnet ${netuid} for testing`);
     });
   });
 
   it("Burned register ", async () => {
     await usingEthApi(async (provider) => {
-      console.log(convertH160ToSS58(ISUBNETS_ADDRESS));
-      const netuid = 1;
+      console.log(convertH160ToSS58(INEURON_ADDRESS));
       let uid = 0;
       await usingApi(async (api) => {
         uid = Number(await api.query.subtensorModule.subnetworkN(netuid));
@@ -100,11 +82,7 @@ describe("Neuron burned register", () => {
       });
 
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
-      const contract = new ethers.Contract(
-        ISUBNETS_ADDRESS,
-        ISubnetsABI,
-        signer
-      );
+      const contract = new ethers.Contract(INEURON_ADDRESS, INeuronABI, signer);
       const tx = await contract.burnedRegister(
         netuid,
         decodeAddress(hotkey.address)
@@ -127,9 +105,7 @@ describe("Neuron burned register", () => {
         let i = 0;
         while (i < 10) {
           let emission = Number(
-            await api.query.subtensorModule.pendingdHotkeyEmission(
-              decodeAddress(hotkey.address)
-            )
+            await api.query.subtensorModule.pendingEmission(netuid)
           );
           console.log("emission is ", emission);
           await new Promise((resolve) => setTimeout(resolve, 2000));
