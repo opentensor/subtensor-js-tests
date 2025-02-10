@@ -6,14 +6,8 @@ import {
   convertTaoToRao,
   convertRaoToTao,
 } from "../util/balance-math.js";
-import { convertH160ToSS58, generateRandomAddress } from "../util/address.js";
-import {
-  getEthereumBalance,
-  estimateTransactionCost,
-  sendEthTransaction,
-  ss58ToH160,
-} from "../util/eth-helpers.js";
-import { getExistentialDeposit, getTaoBalance } from "../util/helpers.js";
+import { generateRandomAddress } from "../util/address.js";
+import { getExistentialDeposit, u256toBigNumber } from "../util/helpers.js";
 import { decodeAddress } from "@polkadot/util-crypto";
 import { assert, ethers } from "ethers";
 import BigNumber from "bignumber.js";
@@ -94,9 +88,9 @@ describe("Staking precompile", () => {
       console.log(`Will use the new registered subnet ${netuid} for testing`);
 
       const root_id = 0;
-      const root_tempo = 9; // neet root epoch to happen before subnet tempo
-      const subnet_tempo = 10;
-      const hotkey_tempo = 20;
+      const root_tempo = 1; // neet root epoch to happen before subnet tempo
+      const subnet_tempo = 1;
+      // const hotkey_tempo = 20;
 
       // set_tx_rate_limit
       const txSudoSetTxRateLimit = api.tx.sudo.sudo(
@@ -235,16 +229,24 @@ describe("Staking precompile", () => {
       );
       await sendTransaction(api, txMinerStake, coldkey);
 
-      const txMonimatorrStake = api.tx.subtensorModule.addStake(
+      const txNonimatorStake = api.tx.subtensorModule.addStake(
         nominator.address,
         netuid,
         stake
       );
-      await sendTransaction(api, txMonimatorrStake, coldkey);
+      await sendTransaction(api, txNonimatorStake, coldkey);
 
-      const miner_stake_before_emission = await api.query.subtensorModule.stake(
-        miner.address,
-        coldkey.address
+      const miner_alpha_before_emission = u256toBigNumber(
+        await api.query.subtensorModule.alpha(
+          miner.address,
+          coldkey.address,
+          netuid
+        )
+      );
+
+      console.log(
+        "miner_alpha_before_emission is ",
+        miner_alpha_before_emission
       );
 
       // Setup YUMA so that it creates emissions:
@@ -255,7 +257,7 @@ describe("Staking precompile", () => {
 
       const txSetWeights = api.tx.subtensorModule.setWeights(
         netuid,
-        [0, 2],
+        [0, 1],
         [0xffff, 0xffff],
         0
       );
@@ -278,12 +280,15 @@ describe("Staking precompile", () => {
       }
 
       while (true) {
-        let miner_current_stake = await api.query.subtensorModule.stake(
-          miner.address,
-          coldkey.address
+        let miner_current_alpha = u256toBigNumber(
+          await api.query.subtensorModule.alpha(
+            miner.address,
+            coldkey.address,
+            netuid
+          )
         );
 
-        if (miner_current_stake > miner_stake_before_emission) {
+        if (miner_current_alpha > miner_alpha_before_emission) {
           console.log("miner got reward");
           break;
         }
