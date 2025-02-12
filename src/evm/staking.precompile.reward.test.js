@@ -148,13 +148,16 @@ describe("Staking precompile", () => {
 
       // step_block(subnet_tempo);
       // waiting for subnet tempo passed
-      while (true) {
+      let index = 0;
+      while (index < 60) {
         const current = await api.rpc.chain.getHeader();
         const currentBlockNumber = current.toHuman().number;
         if (currentBlockNumber - lastBlockNumber > subnet_tempo) break;
+        console.log("wait for subnet temp");
 
         // sleep 0.1 sec, each block in 0.25 sec
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        index += 1;
       }
 
       // pallet_subtensor::SubnetOwnerCut::<Test>::set(0);
@@ -268,7 +271,8 @@ describe("Staking precompile", () => {
       );
       await sendTransaction(api, txRootRegister, coldkey);
 
-      while (true) {
+      let index = 0;
+      while (index < 60) {
         const pending = await api.query.subtensorModule.pendingEmission(netuid);
         if (pending > 0) {
           console.log("pending amount is ", pending.toHuman());
@@ -277,9 +281,11 @@ describe("Staking precompile", () => {
 
         await new Promise((resolve) => setTimeout(resolve, 1000));
         console.log("wait for the pendingEmission update");
+        index += 1;
       }
 
-      while (true) {
+      index = 0;
+      while (index < 60) {
         let miner_current_alpha = u256toBigNumber(
           await api.query.subtensorModule.alpha(
             miner.address,
@@ -295,6 +301,7 @@ describe("Staking precompile", () => {
 
         await new Promise((resolve) => setTimeout(resolve, 1000));
         console.log(" waiting for emission");
+        index += 1;
       }
     });
   });
