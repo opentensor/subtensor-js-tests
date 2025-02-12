@@ -1,5 +1,5 @@
 import { usingApi, usingEthApi, sendTransaction } from "../util/comm.js";
-import { getTestKeys } from "../util/known-keys.js";
+import { getRandomKeypair, getTestKeys } from "../util/known-keys.js";
 import { convertTaoToRao } from "../util/balance-math.js";
 import { convertH160ToSS58, generateRandomAddress } from "../util/address.js";
 import { getExistentialDeposit } from "../util/helpers.js";
@@ -10,6 +10,8 @@ import { ISUBNET_ADDRESS, ISubnetABI } from "../util/precompile.js";
 let tk;
 const amount1TAO = convertTaoToRao(1.0);
 let fundedEthWallet = generateRandomAddress();
+let hotkey1 = getRandomKeypair();
+let hotkey2 = getRandomKeypair();
 let ed;
 
 let totalNetworks = 0;
@@ -22,11 +24,29 @@ describe("Subnet precompile test", () => {
       // Alice funds fundedEthWallet
       const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
 
-      const transfer = api.tx.balances.transferKeepAlive(
-        ss58mirror,
-        amount1TAO.multipliedBy(100000).toString()
+      const txSudoSetBalance1 = api.tx.sudo.sudo(
+        api.tx.balances.forceSetBalance(
+          ss58mirror,
+          amount1TAO.multipliedBy(1e8).toString()
+        )
       );
-      await sendTransaction(api, transfer, tk.alice);
+      await sendTransaction(api, txSudoSetBalance1, tk.alice);
+
+      const txSudoSetBalance2 = api.tx.sudo.sudo(
+        api.tx.balances.forceSetBalance(
+          hotkey1.address,
+          amount1TAO.multipliedBy(1e8).toString()
+        )
+      );
+      await sendTransaction(api, txSudoSetBalance2, tk.alice);
+
+      const txSudoSetBalance3 = api.tx.sudo.sudo(
+        api.tx.balances.forceSetBalance(
+          hotkey2.address,
+          amount1TAO.multipliedBy(1e8).toString()
+        )
+      );
+      await sendTransaction(api, txSudoSetBalance3, tk.alice);
     });
   });
 
@@ -41,7 +61,7 @@ describe("Subnet precompile test", () => {
       // Create a contract instances
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
       const contract = new ethers.Contract(ISUBNET_ADDRESS, ISubnetABI, signer);
-      const tx = await contract.registerNetwork(tk.alice.publicKey);
+      const tx = await contract.registerNetwork(hotkey1.publicKey);
       await tx.wait();
 
       usingApi(async (api) => {
@@ -79,7 +99,7 @@ describe("Subnet precompile test", () => {
       const additional = ethers.toUtf8Bytes("additional");
 
       const tx = await contract.registerNetwork(
-        tk.bob.publicKey,
+        hotkey2.publicKey,
         name,
         repo,
         contact,
