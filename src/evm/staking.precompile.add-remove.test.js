@@ -6,7 +6,7 @@ import {
   generateRandomAddress,
   convertH160ToPublicKey,
 } from "../util/address.js";
-import { u256toBigNumber } from "../util/helpers.js";
+import { u128tou64 } from "../util/helpers.js";
 import { ISTAKING_ADDRESS, IStakingABI } from "../util/precompile.js";
 import { ethers } from "ethers";
 import { expect, use as chaiUse } from "chai";
@@ -100,7 +100,7 @@ describe("Staking precompile", () => {
 
       let stakeBefore;
       await usingApi(async (api) => {
-        stakeBefore = u256toBigNumber(
+        stakeBefore = u128tou64(
           await api.query.subtensorModule.alpha(
             hotkey.address,
             ss58mirror,
@@ -130,7 +130,7 @@ describe("Staking precompile", () => {
       expect(stake_from_contract).to.be.bignumber.gt(stakeBefore);
 
       await usingApi(async (api) => {
-        let stake = u256toBigNumber(
+        let stake = u128tou64(
           await api.query.subtensorModule.alpha(
             hotkey.address,
             ss58mirror,
@@ -150,7 +150,7 @@ describe("Staking precompile", () => {
 
       let stakeBefore;
       await usingApi(async (api) => {
-        stakeBefore = u256toBigNumber(
+        stakeBefore = u128tou64(
           await api.query.subtensorModule.alpha(
             hotkey.address,
             ss58mirror,
@@ -199,7 +199,7 @@ describe("Staking precompile", () => {
         await txAdd.wait();
 
         // Get Alpha via polkadot API
-        let alpha = u256toBigNumber(
+        let alpha = u128tou64(
           await api.query.subtensorModule.alpha(
             hotkey.address,
             ss58mirror,
@@ -207,20 +207,12 @@ describe("Staking precompile", () => {
           )
         );
 
-        // Adjust decimals
-        alpha = alpha.multipliedBy(1e9);
-
         // get stake via contract method
         const stake_from_contract = new BigNumber(
           await contract.getStake(hotkey.publicKey, coldPublicKey, netuid)
         );
 
-        expect(stake_from_contract).to.not.undefined;
-
-        // alpha value is not equal to the staked TAO
-        // Alpha shares should be numerically equal to stake since this is a simple case with no
-        // unstaking, etc.
-        // expect(alpha).to.be.bignumber.eq(stake_from_contract);
+        expect(stake_from_contract).to.be.bignumber.eq(alpha);
       });
     });
   });
@@ -244,7 +236,7 @@ describe("Staking precompile", () => {
         });
         await txAdd.wait();
 
-        let stakeBefore = u256toBigNumber(
+        let stakeBefore = u128tou64(
           await api.query.subtensorModule.alpha(
             hotkey.address,
             ss58mirror,
@@ -252,18 +244,14 @@ describe("Staking precompile", () => {
           )
         );
 
-        // Remove all stake. stakeBefore is returned as Alpha using 10^9 decimals, so convert it first
-        const removeAmountStr = new BigNumber(stakeBefore.toFixed())
-          .multipliedBy(1e9)
-          .toFixed();
         const tx = await contract.removeStake(
           hotkey.publicKey,
-          removeAmountStr,
+          stakeBefore.toFixed(0),
           netuid
         );
         await tx.wait();
 
-        let stake = u256toBigNumber(
+        let stake = u128tou64(
           await api.query.subtensorModule.alpha(
             hotkey.address,
             ss58mirror,
@@ -272,9 +260,9 @@ describe("Staking precompile", () => {
         );
 
         // sometimes the check not valid because of emission
-        // expect(stake).to.be.bignumber.lt(stakeBefore);
+        expect(stake).to.be.bignumber.lt(stakeBefore);
 
-        if (stake <= stakeBefore) {
+        if (stake >= stakeBefore) {
           console.log(
             `WARN the stake after remove is not expected. current is ${stake}, before removed is ${stakeBefore}`
           );
@@ -317,7 +305,7 @@ describe("Staking precompile", () => {
 
       let stakeBefore;
       await usingApi(async (api) => {
-        stakeBefore = u256toBigNumber(
+        stakeBefore = u128tou64(
           await api.query.subtensorModule.alpha(
             hotkey.address,
             ss58mirror,
@@ -338,7 +326,7 @@ describe("Staking precompile", () => {
       await sendTransaction(api, proxyCall, tk.bob);
 
       await usingApi(async (api) => {
-        let stake = u256toBigNumber(
+        let stake = u128tou64(
           await api.query.subtensorModule.alpha(
             hotkey.address,
             ss58mirror,
