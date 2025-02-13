@@ -1,6 +1,7 @@
 import { WsProvider, ApiPromise } from "@polkadot/api";
 import { WS_ENDPOINT, CONN_TIMEOUT } from "../config.js";
 import { getTestKeys } from "./util/known-keys.js";
+import { sendTransaction } from "./util/comm.js"
 
 function withTimeout(promise, timeoutMs) {
   // Create a promise that rejects in <timeoutMs> milliseconds

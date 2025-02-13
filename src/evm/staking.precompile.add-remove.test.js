@@ -346,11 +346,11 @@ describe("Staking precompile", () => {
           )
         );
 
-        // expect(stake).to.be.bignumber.gt(stakeBefore);
+        expect(stake).to.be.bignumber.gt(stakeBefore);
 
-        if (stake >= stakeBefore) {
+        if (stake <= stakeBefore) {
           console.log(
-            `WARN the stake after proxy setting is not expected. current is ${stake}, before removed is ${stakeBefore}`
+            `WARN the stake after proxy setting is not expected. current is ${stake}, before stake is ${stakeBefore}`
           );
         }
       });
