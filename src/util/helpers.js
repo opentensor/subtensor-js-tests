@@ -54,10 +54,10 @@ function childrenArraysEqual(arr1, arr2) {
   if ((arr1.length == 0) && (arr2.length == 0)) {
     return true;
   }
-  for (let i=0; i<arr1.length; i++) {
+  for (let i = 0; i < arr1.length; i++) {
     if ((arr1[i][0] != arr2[i][0]) || (arr1[i][1] != arr2[i][1])) {
       return false;
-    } 
+    }
   }
   return true;
 }
@@ -150,6 +150,10 @@ export async function getExistentialDeposit(api) {
   return ed.toBigInt();
 }
 
+export function u128tou64(value) {
+  return new BigNumber(value.get('bits').toString()).dividedBy(new BigNumber(2).pow(64));
+}
+
 export function u256toBigNumber(u256) {
   const hexString = u256.bits.toHex();
   const cleanHexString = hexString.startsWith("0x") ? hexString.slice(2) : hexString;
@@ -163,7 +167,7 @@ export function u256toBigNumber(u256) {
   }
 
   // Take chunks of 8 bytes each
-  let bigNumChunks = []; 
+  let bigNumChunks = [];
   for (let i = 0; i < byteArray.length; i += 8) {
     // Take a slice of up to 8 bytes at a time
     const chunk = byteArray.slice(i, i + 8);
@@ -176,7 +180,7 @@ export function u256toBigNumber(u256) {
   bigNumChunks = bigNumChunks.reverse();
   let combined = new BigNumber(0);
   let base = new BigNumber("10000000000000000", 16); // 2^64
-  for (let i=0; i < bigNumChunks.length; i++) {
+  for (let i = 0; i < bigNumChunks.length; i++) {
     combined = combined.multipliedBy(base).plus(bigNumChunks[i]);
   }
   return combined;
