@@ -94,7 +94,7 @@ describe("Subnet precompile test", () => {
         hotkey2.publicKey,
         "name",
         "repo",
-        "contract",
+        "contact",
         "subnetUrl",
         "discord",
         "description",
