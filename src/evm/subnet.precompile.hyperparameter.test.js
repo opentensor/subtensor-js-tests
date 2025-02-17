@@ -90,23 +90,15 @@ describe("Subnet precompile test", () => {
       const contract = new ethers.Contract(ISUBNET_ADDRESS, ISubnetABI, signer);
 
       // Execute transaction
-      const name = ethers.toUtf8Bytes("name");
-      const repo = ethers.toUtf8Bytes("repo");
-      const contact = ethers.toUtf8Bytes("contact");
-      const subnetUrl = ethers.toUtf8Bytes("subnetUrl");
-      const discord = ethers.toUtf8Bytes("discord");
-      const description = ethers.toUtf8Bytes("description");
-      const additional = ethers.toUtf8Bytes("additional");
-
       const tx = await contract.registerNetwork(
         hotkey2.publicKey,
-        name,
-        repo,
-        contact,
-        subnetUrl,
-        discord,
-        description,
-        additional
+        "name",
+        "repo",
+        "contract",
+        "subnetUrl",
+        "discord",
+        "description",
+        "additional"
       );
       await tx.wait();
 

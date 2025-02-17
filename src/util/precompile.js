@@ -604,9 +604,9 @@ export const ISubnetABI = [
     name: "getImmunityPeriod",
     outputs: [
       {
-        internalType: "uint64",
+        internalType: "uint16",
         name: "",
-        type: "uint64",
+        type: "uint16",
       },
     ],
     stateMutability: "view",
@@ -1017,9 +1017,9 @@ export const ISubnetABI = [
         type: "uint16",
       },
       {
-        internalType: "uint64",
+        internalType: "uint16",
         name: "immunityPeriod",
-        type: "uint64",
+        type: "uint16",
       },
     ],
     name: "setImmunityPeriod",
@@ -1335,48 +1335,48 @@ export const ISubnetABI = [
       {
         internalType: "bytes32",
         name: "hotkey",
-        type: "bytes32",
+        type: "bytes32"
       },
       {
-        internalType: "bytes",
+        internalType: "string",
         name: "subnetName",
-        type: "bytes",
+        type: "string"
       },
       {
-        internalType: "bytes",
+        internalType: "string",
         name: "githubRepo",
-        type: "bytes",
+        type: "string"
       },
       {
-        internalType: "bytes",
+        internalType: "string",
         name: "subnetContact",
-        type: "bytes",
+        type: "string"
       },
       {
-        internalType: "bytes",
+        internalType: "string",
         name: "subnetUrl",
-        type: "bytes",
+        type: "string"
       },
       {
-        internalType: "bytes",
+        internalType: "string",
         name: "discord",
-        type: "bytes",
+        type: "string"
       },
       {
-        internalType: "bytes",
+        internalType: "string",
         name: "description",
-        type: "bytes",
+        type: "string"
       },
       {
-        internalType: "bytes",
+        internalType: "string",
         name: "additional",
-        type: "bytes",
-      },
+        type: "string"
+      }
     ],
     name: "registerNetwork",
     outputs: [],
     stateMutability: "payable",
-    type: "function",
+    type: "function"
   },
 ];
 
