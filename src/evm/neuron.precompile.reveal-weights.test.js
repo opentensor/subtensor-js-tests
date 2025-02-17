@@ -144,9 +144,8 @@ describe("EVM neuron weights test", () => {
     await usingEthApi(async (provider) => {
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
       const contract = new ethers.Contract(INEURON_ADDRESS, INeuronABI, signer);
-      const commit_hash = getCommitHash(netuid);
-      const bigNumberValue = ethers.toBigInt(commit_hash);
-      const tx = await contract.commitWeights(netuid, bigNumberValue);
+      const commitHash = getCommitHash(netuid);
+      const tx = await contract.commitWeights(netuid, commitHash);
       await tx.wait();
     });
 

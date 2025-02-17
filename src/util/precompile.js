@@ -1389,9 +1389,9 @@ export const INeuronABI = [
         type: "uint16",
       },
       {
-        internalType: "uint256",
+        internalType: "bytes32",
         name: "commitHash",
-        type: "uint256",
+        type: "bytes32",
       },
     ],
     name: "commitWeights",
