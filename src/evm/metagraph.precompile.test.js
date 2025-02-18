@@ -99,14 +99,14 @@ describe("Neuron metagraph data test", () => {
       const trust = await metagraphContract.getTrust(netuid, uid);
       expect(trust).to.not.be.undefined;
 
-      const consunsus = await metagraphContract.getConsensus(netuid, uid);
-      expect(consunsus).to.not.be.undefined;
+      const consensus = await metagraphContract.getConsensus(netuid, uid);
+      expect(consensus).to.not.be.undefined;
 
       const incentive = await metagraphContract.getIncentive(netuid, uid);
       expect(incentive).to.not.be.undefined;
 
-      const diviends = await metagraphContract.getDividends(netuid, uid);
-      expect(diviends).to.not.be.undefined;
+      const dividends = await metagraphContract.getDividends(netuid, uid);
+      expect(dividends).to.not.be.undefined;
 
       const emission = await metagraphContract.getEmission(netuid, uid);
       expect(emission).to.not.be.undefined;
