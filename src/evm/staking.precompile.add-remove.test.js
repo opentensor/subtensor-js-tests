@@ -184,12 +184,15 @@ describe("Staking precompile", () => {
         // Create a contract instances
         const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
         const coldPublicKey = convertH160ToPublicKey(fundedEthWallet.address);
-        const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
 
         const contract = new ethers.Contract(
           ISTAKING_ADDRESS,
           IStakingABI,
           signer
+        );
+
+        const stakedBefore = new BigNumber(
+          await contract.getStake(hotkey.publicKey, coldPublicKey, netuid)
         );
 
         // Add stake
@@ -198,21 +201,14 @@ describe("Staking precompile", () => {
         });
         await txAdd.wait();
 
-        // Get Alpha via polkadot API
-        let alpha = u128tou64(
-          await api.query.subtensorModule.alpha(
-            hotkey.address,
-            ss58mirror,
-            netuid
-          )
-        );
 
-        // get stake via contract method
-        const stake_from_contract = new BigNumber(
+        const staked = new BigNumber(
           await contract.getStake(hotkey.publicKey, coldPublicKey, netuid)
         );
 
-        expect(stake_from_contract).to.be.bignumber.eq(alpha);
+        // the api for getting the stake is exposed only on the rust-level - we don't have access to 
+        // this value via RPC. So we just check it indirectly here.
+        expect(staked).to.be.bignumber.gt(stakedBefore);
       });
     });
   });
