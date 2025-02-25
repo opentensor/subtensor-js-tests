@@ -39,19 +39,6 @@ export const IStakingABI = [
     inputs: [
       {
         internalType: "bytes32",
-        name: "delegate",
-        type: "bytes32",
-      },
-    ],
-    name: "removeProxy",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "bytes32",
         name: "hotkey",
         type: "bytes32",
       },
@@ -75,6 +62,57 @@ export const IStakingABI = [
       },
     ],
     stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "coldkey",
+        type: "bytes32",
+      },
+    ],
+    name: "getTotalColdkeyStake",
+    outputs: [
+      {
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "hotkey",
+        type: "bytes32",
+      },
+    ],
+    name: "getTotalHotkeyStake",
+    outputs: [
+      {
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "delegate",
+        type: "bytes32",
+      },
+    ],
+    name: "removeProxy",
+    outputs: [],
+    stateMutability: "nonpayable",
     type: "function",
   },
   {
@@ -1335,48 +1373,48 @@ export const ISubnetABI = [
       {
         internalType: "bytes32",
         name: "hotkey",
-        type: "bytes32"
+        type: "bytes32",
       },
       {
         internalType: "string",
         name: "subnetName",
-        type: "string"
+        type: "string",
       },
       {
         internalType: "string",
         name: "githubRepo",
-        type: "string"
+        type: "string",
       },
       {
         internalType: "string",
         name: "subnetContact",
-        type: "string"
+        type: "string",
       },
       {
         internalType: "string",
         name: "subnetUrl",
-        type: "string"
+        type: "string",
       },
       {
         internalType: "string",
         name: "discord",
-        type: "string"
+        type: "string",
       },
       {
         internalType: "string",
         name: "description",
-        type: "string"
+        type: "string",
       },
       {
         internalType: "string",
         name: "additional",
-        type: "string"
-      }
+        type: "string",
+      },
     ],
     name: "registerNetwork",
     outputs: [],
     stateMutability: "payable",
-    type: "function"
+    type: "function",
   },
 ];
 
