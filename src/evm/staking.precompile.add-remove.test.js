@@ -255,12 +255,6 @@ describe("Staking precompile", () => {
           await contract.getTotalHotkeyStake(hotkey.publicKey)
         );
 
-        // Add stake
-        // const txAdd = await contract.addStake(hotkey.publicKey, netuid, {
-        //   value: amountStr,
-        // });
-        // await txAdd.wait();
-
         let stakeBefore = u128tou64(
           await api.query.subtensorModule.alpha(
             hotkey.address,
