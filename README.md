@@ -21,3 +21,10 @@ etc.
 yarn
 yarn run test
 ```
+
+To run a particular test case, you can pass an argument with the name or part of
+the name. For example:
+
+```bash
+yarn run test -- -g "Can set subnet parameter"
+```

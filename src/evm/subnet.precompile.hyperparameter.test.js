@@ -120,14 +120,44 @@ describe("Subnet precompile test", () => {
       // Create a contract instances
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
       const contract = new ethers.Contract(ISUBNET_ADDRESS, ISubnetABI, signer);
+      const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
+      const transfer = api.tx.sudo.sudo(
+        api.tx.balances.forceSetBalance(
+          tk.bob.address,
+          amount1TAO.multipliedBy(1e9).toString()
+        )
+      );
+      await sendTransaction(api, transfer, tk.alice);
+
+      let newSubnetId;
 
       await usingApi(async (api) => {
+        const hotkey = getRandomKeypair();
+        const registerNetwork = api.tx.subtensorModule.registerNetwork(hotkey.address);
+        await sendTransaction(api, registerNetwork, tk.bob);
+
         totalNetworks = (
           await api.query.subtensorModule.totalNetworks()
         ).toNumber();
-      });
+        newSubnetId = totalNetworks - 1;
 
-      const newSubnetId = totalNetworks - 1;
+        let owner = await api.query.subtensorModule.subnetOwner(newSubnetId);
+        expect(owner.toString()).to.eq(tk.bob.address.toString());
+
+        const swapColdkey = api.tx.sudo.sudo(
+          api.tx.subtensorModule.swapColdkey(
+            tk.bob.address,
+            ss58mirror,
+            0
+          ));
+        await sendTransaction(api, swapColdkey, tk.alice);
+
+        owner = await api.query.subtensorModule.subnetOwner(newSubnetId);
+
+        // the requests below can only be performed by the subnet owner or the root
+        // only the coldkey is subnet owner
+        expect(owner.toString()).to.eq(ss58mirror);
+      });
 
       // servingRateLimit hyperparameter
       let newValue = 100;
@@ -148,21 +178,24 @@ describe("Subnet precompile test", () => {
       expect(valueFromContract).to.eq(newValue);
       expect(valueFromContract).to.eq(onchainValue);
 
-      // minDifficulty hyperparameter
-      newValue = 101;
-      tx = await contract.setMinDifficulty(newSubnetId, newValue);
-      await tx.wait();
+      // minDifficulty hyperparameter 
+      //
+      // disabled: only by sudo
+      //
+      // newValue = 101;
+      // tx = await contract.setMinDifficulty(newSubnetId, newValue);
+      // await tx.wait();
 
-      await usingApi(async (api) => {
-        onchainValue = Number(
-          await api.query.subtensorModule.minDifficulty(newSubnetId)
-        );
-      });
+      // await usingApi(async (api) => {
+      //   onchainValue = Number(
+      //     await api.query.subtensorModule.minDifficulty(newSubnetId)
+      //   );
+      // });
 
-      valueFromContract = Number(await contract.getMinDifficulty(newSubnetId));
+      // valueFromContract = Number(await contract.getMinDifficulty(newSubnetId));
 
-      expect(valueFromContract).to.eq(newValue);
-      expect(valueFromContract).to.eq(onchainValue);
+      // expect(valueFromContract).to.eq(newValue);
+      // expect(valueFromContract).to.eq(onchainValue);
 
       // maxDifficulty hyperparameter
       newValue = 102;
@@ -418,22 +451,22 @@ describe("Subnet precompile test", () => {
       expect(valueFromContract).to.eq(newValue);
       expect(valueFromContract).to.eq(onchainValue);
 
-      // difficulty hyperparameter
-      newValue = 114;
+      // difficulty hyperparameter (disabled: sudo only)
+      // newValue = 114;
 
-      tx = await contract.setDifficulty(newSubnetId, newValue);
-      await tx.wait();
+      // tx = await contract.setDifficulty(newSubnetId, newValue);
+      // await tx.wait();
 
-      await usingApi(async (api) => {
-        onchainValue = Number(
-          await api.query.subtensorModule.difficulty(newSubnetId)
-        );
-      });
+      // await usingApi(async (api) => {
+      //   onchainValue = Number(
+      //     await api.query.subtensorModule.difficulty(newSubnetId)
+      //   );
+      // });
 
-      valueFromContract = Number(await contract.getDifficulty(newSubnetId));
+      // valueFromContract = Number(await contract.getDifficulty(newSubnetId));
 
-      expect(valueFromContract).to.eq(newValue);
-      expect(valueFromContract).to.eq(onchainValue);
+      // expect(valueFromContract).to.eq(newValue);
+      // expect(valueFromContract).to.eq(onchainValue);
 
       // bondsMovingAverage hyperparameter
       newValue = 115;
