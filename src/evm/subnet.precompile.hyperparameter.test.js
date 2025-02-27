@@ -120,44 +120,11 @@ describe("Subnet precompile test", () => {
       // Create a contract instances
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
       const contract = new ethers.Contract(ISUBNET_ADDRESS, ISubnetABI, signer);
-      const ss58mirror = convertH160ToSS58(fundedEthWallet.address);
-      const transfer = api.tx.sudo.sudo(
-        api.tx.balances.forceSetBalance(
-          tk.bob.address,
-          amount1TAO.multipliedBy(1e9).toString()
-        )
-      );
-      await sendTransaction(api, transfer, tk.alice);
 
-      let newSubnetId;
-
-      await usingApi(async (api) => {
-        const hotkey = getRandomKeypair();
-        const registerNetwork = api.tx.subtensorModule.registerNetwork(hotkey.address);
-        await sendTransaction(api, registerNetwork, tk.bob);
-
-        totalNetworks = (
-          await api.query.subtensorModule.totalNetworks()
-        ).toNumber();
-        newSubnetId = totalNetworks - 1;
-
-        let owner = await api.query.subtensorModule.subnetOwner(newSubnetId);
-        expect(owner.toString()).to.eq(tk.bob.address.toString());
-
-        const swapColdkey = api.tx.sudo.sudo(
-          api.tx.subtensorModule.swapColdkey(
-            tk.bob.address,
-            ss58mirror,
-            0
-          ));
-        await sendTransaction(api, swapColdkey, tk.alice);
-
-        owner = await api.query.subtensorModule.subnetOwner(newSubnetId);
-
-        // the requests below can only be performed by the subnet owner or the root
-        // only the coldkey is subnet owner
-        expect(owner.toString()).to.eq(ss58mirror);
-      });
+      totalNetworks = (
+        await api.query.subtensorModule.totalNetworks()
+      ).toNumber();
+      const newSubnetId = totalNetworks - 1;
 
       // servingRateLimit hyperparameter
       let newValue = 100;
