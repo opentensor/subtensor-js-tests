@@ -121,12 +121,9 @@ describe("Subnet precompile test", () => {
       const signer = new ethers.Wallet(fundedEthWallet.privateKey, provider);
       const contract = new ethers.Contract(ISUBNET_ADDRESS, ISubnetABI, signer);
 
-      await usingApi(async (api) => {
-        totalNetworks = (
-          await api.query.subtensorModule.totalNetworks()
-        ).toNumber();
-      });
-
+      totalNetworks = (
+        await api.query.subtensorModule.totalNetworks()
+      ).toNumber();
       const newSubnetId = totalNetworks - 1;
 
       // servingRateLimit hyperparameter
@@ -148,21 +145,24 @@ describe("Subnet precompile test", () => {
       expect(valueFromContract).to.eq(newValue);
       expect(valueFromContract).to.eq(onchainValue);
 
-      // minDifficulty hyperparameter
-      newValue = 101;
-      tx = await contract.setMinDifficulty(newSubnetId, newValue);
-      await tx.wait();
+      // minDifficulty hyperparameter 
+      //
+      // disabled: only by sudo
+      //
+      // newValue = 101;
+      // tx = await contract.setMinDifficulty(newSubnetId, newValue);
+      // await tx.wait();
 
-      await usingApi(async (api) => {
-        onchainValue = Number(
-          await api.query.subtensorModule.minDifficulty(newSubnetId)
-        );
-      });
+      // await usingApi(async (api) => {
+      //   onchainValue = Number(
+      //     await api.query.subtensorModule.minDifficulty(newSubnetId)
+      //   );
+      // });
 
-      valueFromContract = Number(await contract.getMinDifficulty(newSubnetId));
+      // valueFromContract = Number(await contract.getMinDifficulty(newSubnetId));
 
-      expect(valueFromContract).to.eq(newValue);
-      expect(valueFromContract).to.eq(onchainValue);
+      // expect(valueFromContract).to.eq(newValue);
+      // expect(valueFromContract).to.eq(onchainValue);
 
       // maxDifficulty hyperparameter
       newValue = 102;
@@ -418,22 +418,22 @@ describe("Subnet precompile test", () => {
       expect(valueFromContract).to.eq(newValue);
       expect(valueFromContract).to.eq(onchainValue);
 
-      // difficulty hyperparameter
-      newValue = 114;
+      // difficulty hyperparameter (disabled: sudo only)
+      // newValue = 114;
 
-      tx = await contract.setDifficulty(newSubnetId, newValue);
-      await tx.wait();
+      // tx = await contract.setDifficulty(newSubnetId, newValue);
+      // await tx.wait();
 
-      await usingApi(async (api) => {
-        onchainValue = Number(
-          await api.query.subtensorModule.difficulty(newSubnetId)
-        );
-      });
+      // await usingApi(async (api) => {
+      //   onchainValue = Number(
+      //     await api.query.subtensorModule.difficulty(newSubnetId)
+      //   );
+      // });
 
-      valueFromContract = Number(await contract.getDifficulty(newSubnetId));
+      // valueFromContract = Number(await contract.getDifficulty(newSubnetId));
 
-      expect(valueFromContract).to.eq(newValue);
-      expect(valueFromContract).to.eq(onchainValue);
+      // expect(valueFromContract).to.eq(newValue);
+      // expect(valueFromContract).to.eq(onchainValue);
 
       // bondsMovingAverage hyperparameter
       newValue = 115;
