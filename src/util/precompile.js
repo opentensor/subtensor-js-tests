@@ -1521,6 +1521,24 @@ export const ISubnetABI = [
     stateMutability: "payable",
     type: "function"
   },
+	{
+		inputs: [
+			{
+				internalType: "uint16",
+				name: "netuid",
+				type: "uint16"
+			},
+			{
+				internalType: "bool",
+				name: "toggle",
+				type: "bool"
+			}
+		],
+		name: "toggleTransfers",
+		outputs: [],
+		stateMutability: "payable",
+		type: "function",
+	},  
 ];
 
 export const INeuronABI = [
